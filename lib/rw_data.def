@@ -1,0 +1,14 @@
+; Import definitions for rw_data.dll (the names LS3DF.dll imports, and dtaCreate for the tests that
+; mount the game's archives; build.py makes the .lib with MinGW dlltool: "Sym@N == _Sym@N" keeps the
+; decorated __stdcall export name).
+LIBRARY rw_data.dll
+EXPORTS
+    dtaClose@4 == _dtaClose@4
+    dtaCreate@4 == _dtaCreate@4
+    dtaDelete@4 == _dtaDelete@4
+    dtaGetTime@12 == _dtaGetTime@12
+    dtaOpen@8 == _dtaOpen@8
+    dtaOpenWrite@8 == _dtaOpenWrite@8
+    dtaRead@12 == _dtaRead@12
+    dtaSeek@12 == _dtaSeek@12
+    dtaWrite@12 == _dtaWrite@12

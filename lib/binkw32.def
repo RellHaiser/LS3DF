@@ -1,0 +1,15 @@
+; Import definitions for binkw32.dll (the names LS3DF.dll imports; build.py makes the .lib with
+; MinGW dlltool: "Sym@N == _Sym@N" keeps the decorated __stdcall export name).
+LIBRARY binkw32.dll
+EXPORTS
+    BinkClose@4 == _BinkClose@4
+    BinkCopyToBufferRect@44 == _BinkCopyToBufferRect@44
+    BinkDoFrame@4 == _BinkDoFrame@4
+    BinkGoto@12 == _BinkGoto@12
+    BinkNextFrame@4 == _BinkNextFrame@4
+    BinkOpen@8 == _BinkOpen@8
+    BinkOpenDirectSound@4 == _BinkOpenDirectSound@4
+    BinkPause@8 == _BinkPause@8
+    BinkSetSoundSystem@8 == _BinkSetSoundSystem@8
+    BinkSetVolume@12 == _BinkSetVolume@12
+    BinkWait@4 == _BinkWait@4

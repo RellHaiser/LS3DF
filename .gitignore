@@ -1,0 +1,17 @@
+# Build output (build.py: build/msvc/LS3DF.dll, build/*.exe; intermediates go to %TEMP%)
+build/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.exe
+*.dll
+__pycache__/
+*.pyc
+
+# Never commit files of the game (original DLLs, .dta archives, unpacked data) or
+# reverse-engineering exports of the original binary.
+*.dta
+*.DTA
+_re/
