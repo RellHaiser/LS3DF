@@ -201,9 +201,9 @@ public:
     // 0xB0 0x1006f490
     virtual bool __stdcall IsKeyDown(int key);
     // 0xB4 / 0xB8 0x1006f4b0 / 0x1006f500: up to 64 keys whose state GetMappedKeys() returns as bits
-    // (only the first 32 fit: the original builds a 64-bit mask and returns its low half).
+    // (a 64-bit mask in EDX:EAX: the game reads both halves).
     virtual HRESULT __stdcall SetKeyMap(const uint8_t *keys, uint32_t count);
-    virtual uint32_t __stdcall GetMappedKeys();
+    virtual uint64_t __stdcall GetMappedKeys();
     // 0xBC / 0xC0 / 0xC4 0x1006f550..: either shift / control / alt key down.
     virtual bool __stdcall IsShiftDown();
     virtual bool __stdcall IsCtrlDown();

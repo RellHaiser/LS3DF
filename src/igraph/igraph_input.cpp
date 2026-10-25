@@ -333,12 +333,12 @@ HRESULT __stdcall IGraph::SetKeyMap(const uint8_t *keys, uint32_t count)
 }
 
 // 0x1006f500
-uint32_t __stdcall IGraph::GetMappedKeys()
+uint64_t __stdcall IGraph::GetMappedKeys()
 {
-    uint32_t bits = 0;
+    uint64_t bits = 0;
     for (int i = 0; i < 0x40; ++i) {
         if (g_keyMap[i] && Down(g_keyMap[i]))
-            bits |= static_cast<uint32_t>(1ull << i);
+            bits |= 1ull << i;
     }
     return bits;
 }
