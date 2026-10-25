@@ -1373,9 +1373,11 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
         g_deviceType = D3DDEVTYPE_REF;
     }
     // No D3DCREATE_FPU_PRESERVE: Direct3D switches the FPU to single precision, which the engine's
-    // float results depend on.
+    // float results depend on. With hardware T&L the device is MIXED ((caps & 1 ? 0x60 : 0) +
+    // 0x20): the engine's index and vertex buffers are all D3DUSAGE_SOFTWAREPROCESSING, which a
+    // HARDWARE_VERTEXPROCESSING device refuses (D3DERR_INVALIDCALL).
     hr = g_pD3D->CreateDevice(g_init.adapter, g_deviceType, g_mainWnd,
-                              ((g_caps & IGCAPS_HW_TNL) ? D3DCREATE_HARDWARE_VERTEXPROCESSING
+                              ((g_caps & IGCAPS_HW_TNL) ? D3DCREATE_MIXED_VERTEXPROCESSING
                                                         : D3DCREATE_SOFTWARE_VERTEXPROCESSING) |
                                   D3DCREATE_MULTITHREADED,
                               &g_presentParams, &g_pDevice);
