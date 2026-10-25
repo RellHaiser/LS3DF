@@ -371,6 +371,9 @@ I3D_RESULT I3D_driver::DrawText2D(int x, int y, const char *text, uint32_t flags
     if (!g_driverStates[0]) {
         g_pDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_POINT);
         g_pDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_POINT);
+    } else if (ig::g_anisotropy) {
+        // (Port enhancement, LS3DF.ini AnisotropicFiltering: back from the text's linear.)
+        g_pDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_ANISOTROPIC);
     }
     if (g_driverStates[9])
         g_pDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);

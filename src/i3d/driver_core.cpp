@@ -7,6 +7,7 @@
 #include <new>
 
 #include "core/debug.h"
+#include "core/enhance.h"
 #include "i3d/area.h"
 #include "i3d/billboard.h"
 #include "i3d/camera.h"
@@ -68,6 +69,20 @@ int g_state37Value;
 int g_driverUnknownADED0;
 
 bool UseWBuffer() { return g_driverStates[DRVSTATE_WBUFFER] != 0; }
+
+bool LightmapsTrueColor()
+{
+    if (g_driverStates[DRVSTATE_LM_TRUECOLOR])
+        return true;
+    if (!Enhancements().trueColorLightmaps)
+        return false;
+    static bool s_logged;
+    if (!s_logged) {
+        s_logged = true;
+        EnhancementLog("TrueColorLightmaps: driver state 0x22 (32-bit lightmaps) is off, kept on");
+    }
+    return true;
+}
 
 void ReapplyDriverStates()
 {
@@ -271,20 +286,35 @@ I3D_RESULT I3D_driver::SetState(int state, uint32_t value)
 {
     if (state > 0x44)
         return I3DERR_INVALIDPARAMS;
-    auto filters = [](DWORD f) {
+    auto filters = [](DWORD minFilter, DWORD magFilter) {
         for (DWORD stage = 0; stage < 3; ++stage) {
-            g_pDevice->SetTextureStageState(stage, D3DTSS_MINFILTER, f);
-            g_pDevice->SetTextureStageState(stage, D3DTSS_MAGFILTER, f);
+            g_pDevice->SetTextureStageState(stage, D3DTSS_MINFILTER, minFilter);
+            g_pDevice->SetTextureStageState(stage, D3DTSS_MAGFILTER, magFilter);
+            // (Port enhancement, LS3DF.ini AnisotropicFiltering; set again here after a device
+            // reset cleared it.)
+            if (minFilter == D3DTEXF_ANISOTROPIC)
+                g_pDevice->SetTextureStageState(stage, D3DTSS_MAXANISOTROPY, static_cast<DWORD>(ig::g_anisotropy));
         }
     };
     switch (state) {
     case 0:
-        filters(value ? D3DTEXF_LINEAR : D3DTEXF_POINT);
+        filters(value ? ig::LinearMinFilter() : D3DTEXF_POINT, value ? D3DTEXF_LINEAR : D3DTEXF_POINT);
         break;
     case 2:
         if (value <= 2) {
+            // (Port enhancement, LS3DF.ini TrilinearFiltering: the levels always blended; the
+            // state keeps the value asked for.)
+            DWORD mipFilter = value;
+            if (Enhancements().trilinear && mipFilter != D3DTEXF_LINEAR) {
+                static bool s_logged;
+                if (!s_logged) {
+                    s_logged = true;
+                    EnhancementLog("TrilinearFiltering: mip filter %u asked for, linear used", value);
+                }
+                mipFilter = D3DTEXF_LINEAR;
+            }
             for (DWORD stage = 0; stage < 3; ++stage)
-                g_pDevice->SetTextureStageState(stage, D3DTSS_MIPFILTER, value);
+                g_pDevice->SetTextureStageState(stage, D3DTSS_MIPFILTER, mipFilter);
         }
         break;
     case 3:

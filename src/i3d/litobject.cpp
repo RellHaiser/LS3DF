@@ -302,7 +302,7 @@ S_lightmapPart *I3D_lit_object::GetParts(int level, int set)
 
 void I3D_lit_object::RewriteParts(int level, int set)
 {
-    if (!g_driverStates[DRVSTATE_LM_TRUECOLOR] || !ig::g_fmtTrueColor)
+    if (!LightmapsTrueColor() || !ig::g_fmtTrueColor)
         return;
     S_lightmapLevel *l = LevelAt(level, set);
     if (!l || !l->lightmap)                 // (fix: a level without patches has no lightmap)

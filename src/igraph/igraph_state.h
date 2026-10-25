@@ -34,6 +34,11 @@ extern uint32_t g_caps;                         // 0x100d1dac IGCAPS_*
 extern uint32_t g_quirks;                       // 0x100d215c IGQ_* below
 extern int g_maxTextureWidth;                   // 0x100d2128
 extern int g_maxTextureHeight;                  // 0x100d1ce8
+// (Port enhancement, LS3DF.ini AnisotropicFiltering) the maximum anisotropy in use: the option
+// capped by the device, 0 when off or unsupported (Init).
+extern int g_anisotropy;
+// The minifying filter of "linear" filtering (driver state 0): anisotropic with g_anisotropy.
+inline DWORD LinearMinFilter() { return g_anisotropy ? D3DTEXF_ANISOTROPIC : D3DTEXF_LINEAR; }
 
 // Texture formats chosen in Init (D3DFMT_UNKNOWN: not available).
 extern D3DFORMAT g_fmt16Bit;                    // 0x100d1da8 R5G6B5 / X1R5G5B5 / A1R5G5B5

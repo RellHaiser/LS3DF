@@ -463,7 +463,7 @@ bool ConvertTexels(uint16_t width, uint16_t height, const uint8_t *bgr, void **o
     if (width == 3 && height == 3)
         return true;
     D3DFORMAT format = ig::g_fmt1BitAlpha;
-    if (g_driverStates[DRVSTATE_LM_TRUECOLOR] && ig::g_fmtTrueColor)
+    if (LightmapsTrueColor() && ig::g_fmtTrueColor)
         format = ig::g_fmtTrueColor;
     // Floyd-Steinberg errors (b, g, r of each texel; a column each side and a row below).
     const bool dither = (format == D3DFMT_X1R5G5B5 || format == D3DFMT_A1R5G5B5) && g_driverStates[DRVSTATE_LM_DITHER];
@@ -728,7 +728,7 @@ bool C_lightmap::Create(const uint16_t *indices, S_lightmapPart *partArray, int 
             Discard(*best);
             return false;
         }
-        const uint32_t flags = (g_driverStates[DRVSTATE_LM_TRUECOLOR] && ig::g_fmtTrueColor)
+        const uint32_t flags = (LightmapsTrueColor() && ig::g_fmtTrueColor)
                                    ? (ITC_EMPTY | ITC_TRUECOLOR | 0x80000)
                                    : (ITC_EMPTY | ITC_ALPHA_1BIT | 0x80000);
         if (FAILED(texture->Create(nullptr, nullptr, flags, best->width, best->height, 0))) {

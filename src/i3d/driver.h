@@ -174,6 +174,9 @@ extern bool g_driverInitialized;
 // The driver's time in ms (0x100be394; Tick advances it).
 extern int g_driverTime;
 inline bool NamesEnabled() { return g_driverStates[DRVSTATE_FRAME_NAMES] != 0; }
+// Lightmap atlases in 32-bit (when the device has A8R8G8B8): driver state DRVSTATE_LM_TRUECOLOR,
+// or always with the port's LS3DF.ini TrueColorLightmaps.
+bool LightmapsTrueColor();
 // A state that holds a float's bits.
 inline float DriverStateFloat(int state)
 {

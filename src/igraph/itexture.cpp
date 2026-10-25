@@ -9,10 +9,12 @@
 #include <new>
 
 #include "core/debug.h"
+#include "core/enhance.h"
 #include "core/i3d_result.h"
 #include "external/rw_data.h"
 #include "igraph/igraph.h"
 #include "igraph/igraph_state.h"
+#include "igraph/mip_filter.h"
 
 using namespace ls3d;
 using namespace ls3d::ig;
@@ -95,7 +97,8 @@ void FitTextureSize(uint16_t width, uint16_t height, uint32_t flags, uint16_t *o
 }
 
 // The name of a texture's cache file: the source path without its extension, the opacity map's
-// name (DXT3), the level count, 'L' for ITC_HALF and ".DX<kind>" / ".565" / ".555".
+// name (DXT3), the level count, 'L' for ITC_HALF, 'G' for the port's improved mip levels and
+// ".DX<kind>" / ".565" / ".555".
 void CacheFileName(const ITexture *texture, const char *fileName, const char *alphaFileName, int kind,
                    bool dxt, char *out)
 {
@@ -111,6 +114,9 @@ void CacheFileName(const ITexture *texture, const char *fileName, const char *al
     std::strcat(buf, levels);
     if (texture->flags & ITC_HALF)
         std::strcat(buf, "L");
+    // (Port enhancement: levels from tex::DownsampleMip are cached apart from the original's.)
+    if (Enhancements().mipmaps && texture->levels > 1)
+        std::strcat(buf, "G");
     std::strcat(buf, ".");
     const size_t n = std::strlen(buf);
     if (dxt) {
@@ -989,6 +995,11 @@ HRESULT ITexture::CreateFromImage(const char *name, const char *alphaName, int w
         }
     }
 
+    // (Port enhancement, LS3DF.ini TrueColorTextures: a texture from an image file in A8R8G8B8.
+    // Not empty or memory textures: their owners may write pixels in the format they asked for.)
+    if (Enhancements().trueColorTextures && name && !(flags & ITC_FROM_MEMORY))
+        flags |= ITC_TRUECOLOR;
+
     // ---- the texture format; `kind`: 0 uncompressed, 1 DXT1, 2 DXT1 with 1-bit alpha, 3 DXT3
     D3DFORMAT staging = D3DFMT_UNKNOWN;         // the uncompressed format compressed from
     int kind = 0;
@@ -1219,6 +1230,24 @@ HRESULT ITexture::CreateFromImage(const char *name, const char *alphaName, int w
         }
         std::memset(next, 0, static_cast<size_t>(width) * height * 2);
     }
+    // (Port enhancement, LS3DF.ini ImprovedMipmaps: the levels from tex::DownsampleMip; those of
+    // a colour-keyed texture, drawn alpha-tested, uploaded with their alpha rescaled to level 0's
+    // coverage at IGraph's reference, from a copy: the next level is made from the unscaled one.)
+    const bool improvedMips = Enhancements().mipmaps && cur;
+    const int coverageRef = improvedMips && (flags & ITC_ALPHA_1BIT) && g_rs.alphaRef > 0
+                                ? (g_rs.alphaRef < 255 ? g_rs.alphaRef : 255)
+                                : 0;
+    const double coverage = coverageRef ? tex::AlphaCoverage(pixels, width, height, coverageRef) : 0.0;
+    uint8_t *scaled = nullptr;
+    if (coverageRef) {
+        scaled = static_cast<uint8_t *>(::operator new(static_cast<size_t>(width) * height * 2, std::nothrow));
+        if (!scaled) {
+            Close();
+            ::operator delete(cur);
+            ::operator delete(next);
+            return I3DERR_OUTOFMEM;
+        }
+    }
     IDirect3DTexture8 *stage = nullptr;
     auto fail = [&](HRESULT hr) {
         if (stage)
@@ -1226,6 +1255,7 @@ HRESULT ITexture::CreateFromImage(const char *name, const char *alphaName, int w
         Close();
         ::operator delete(cur);
         ::operator delete(next);
+        ::operator delete(scaled);
         return hr;
     };
     if (!(flags & ITC_EMPTY) && staging) {
@@ -1245,11 +1275,19 @@ HRESULT ITexture::CreateFromImage(const char *name, const char *alphaName, int w
         if (!(flags & ITC_EMPTY)) {
             const uint8_t *image = pixels;
             if (level) {
-                Downsample(cur, levelW, levelH, rowBytes, next);
+                if (improvedMips)
+                    tex::DownsampleMip(cur, levelW, levelH, next);
+                else
+                    Downsample(cur, levelW, levelH, rowBytes, next);
                 levelW = levelW >> 1 ? levelW >> 1 : 1;
                 levelH = levelH >> 1 ? levelH >> 1 : 1;
                 rowBytes >>= 1;
                 image = next;
+                if (scaled) {
+                    std::memcpy(scaled, next, static_cast<size_t>(levelW) * levelH * 4);
+                    tex::ScaleAlphaToCoverage(scaled, levelW, levelH, coverageRef, coverage);
+                    image = scaled;
+                }
             }
             bool ok;
             if (stage) {
@@ -1292,6 +1330,7 @@ HRESULT ITexture::CreateFromImage(const char *name, const char *alphaName, int w
         stage->Release();
     ::operator delete(cur);
     ::operator delete(next);
+    ::operator delete(scaled);
     AddToList((flags & ITC_NOCACHE) ? g_uncachedTextures : g_cachedTextures, this);
     loaded = true;
     Preload();

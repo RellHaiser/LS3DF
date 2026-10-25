@@ -3,13 +3,22 @@
 // (src/igraph) create textures on the same software Direct3D device (fake_d3d8.h); the levels and
 // the texture objects' fields must be identical.
 //
-// Usage: compare_texture.exe [original LS3DF.dll] [rounds]
+// Usage: compare_texture.exe [original LS3DF.dll] [rounds] [enhanced | mipmaps]
 //
-// test-sources: src/igraph/*.cpp src/core/debug.cpp src/core/cpu.cpp src/dx/dxerr8.cpp src/i3d/ib_manager.cpp src/i3d/vb_manager.cpp src/dshow/*.cpp
+// The port's LS3DF.ini enhancements (src/core/enhance.h), off by default, are checked in two more
+// modes. enhanced (ImprovedMipmaps + TrueColorTextures): the original creates image files' textures
+// with ITC_TRUECOLOR; the objects and level 0 must match its, each further level of an A8R8G8B8
+// texture must be tex::DownsampleMip of the level above. mipmaps (ImprovedMipmaps alone): the same
+// for A8R8G8B8 textures; 16-bit levels made from a kept 32-bit image (ITC_KEEP_PIXELS) must be the
+// DownsampleMip chain converted by WriteSurface, and the second pass's levels, loaded from the
+// port's own cache file (named apart from the original's), those of the first pass.
+//
+// test-sources: src/igraph/*.cpp src/core/debug.cpp src/core/cpu.cpp src/core/enhance.cpp src/dx/dxerr8.cpp src/i3d/ib_manager.cpp src/i3d/vb_manager.cpp src/dshow/*.cpp
 #include <windows.h>
 
 #include <float.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -17,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "../src/core/enhance.h"
 #include "../src/i3d/driver.h"
 #include "../src/i3d/i3d_links.h"
 #include "../src/i3d/vb_manager.h"
@@ -24,6 +34,7 @@
 #include "../src/igraph/igraph_state.h"
 #include "../src/igraph/ishow.h"
 #include "../src/igraph/itexture.h"
+#include "../src/igraph/mip_filter.h"
 #include "fake_d3d8.h"
 #include "test_paths.h"
 
@@ -258,6 +269,24 @@ void DeleteCaches()
     FindClose(h);
 }
 
+// The names of the cache files in the test folder.
+std::vector<std::string> CacheFiles()
+{
+    std::vector<std::string> out;
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA((g_dir + "*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE)
+        return out;
+    do {
+        const char *ext = std::strrchr(fd.cFileName, '.');
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && ext && _stricmp(ext, ".bmp") &&
+            _stricmp(ext, ".tga") && _stricmp(ext, ".dds"))
+            out.push_back(fd.cFileName);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return out;
+}
+
 // The state of a created texture.
 struct S_result {
     HRESULT hr;
@@ -292,6 +321,38 @@ S_result Capture(HRESULT hr, const uint8_t *object)
     return r;
 }
 
+// The levels below level 0 that the port's ImprovedMipmaps makes of a 32-bit image: the
+// DownsampleMip chain (a colour-keyed texture's uploaded with the alpha rescaled to the image's
+// coverage at IGraph's alpha reference), in `format` as Create writes them (the texture's
+// ITC_DITHER).
+std::vector<std::vector<uint8_t>> ExpectedMips(const uint8_t *bgra, int width, int height, size_t levels,
+                                               uint32_t flags, D3DFORMAT format, const ITexture *texture)
+{
+    std::vector<std::vector<uint8_t>> out;
+    const int ref = (flags & ITC_ALPHA_1BIT) ? ls3d::ig::g_rs.alphaRef : 0;
+    const double coverage = ref ? ls3d::tex::AlphaCoverage(bgra, width, height, ref) : 0.0;
+    std::vector<uint8_t> cur(bgra, bgra + size_t(width) * height * 4), next;
+    for (size_t l = 1; l < levels; ++l) {
+        const int w = width > 1 ? width >> 1 : 1, h = height > 1 ? height >> 1 : 1;
+        next.assign(size_t(w) * h * 4, 0);
+        ls3d::tex::DownsampleMip(cur.data(), width, height, next.data());
+        cur.swap(next);
+        width = w;
+        height = h;
+        std::vector<uint8_t> level = cur;
+        if (ref)
+            ls3d::tex::ScaleAlphaToCoverage(level.data(), w, h, ref, coverage);
+        if (format == D3DFMT_A8R8G8B8) {
+            out.push_back(level);
+        } else {
+            FakeSurface s(UINT(w), UINT(h), format, D3DPOOL_MANAGED);
+            ls3d::tex::WriteSurface(texture, level.data(), &s, UINT(w), UINT(h), 0);
+            out.push_back(s.bits);
+        }
+    }
+    return out;
+}
+
 std::string Describe(const S_result &r)
 {
     char buf[256];
@@ -307,6 +368,19 @@ int main(int argc, char **argv)
 {
     const char *orig = OriginalDllPath(argc > 1 ? argv[1] : nullptr);
     const int rounds = argc > 2 ? std::atoi(argv[2]) : 400;
+    const std::string mode = argc > 3 ? argv[3] : "";
+    const bool trueColorMode = mode == "enhanced", mipsMode = mode == "mipmaps";
+    const bool enhanced = trueColorMode || mipsMode;
+    if (!mode.empty() && !enhanced) {
+        std::printf("unknown mode %s (enhanced, mipmaps)\n", mode.c_str());
+        return 2;
+    }
+    {
+        ls3d::S_enhancements e = {};
+        e.mipmaps = enhanced;
+        e.trueColorTextures = trueColorMode;
+        ls3d::SetEnhancements(e);
+    }
     char dir[MAX_PATH];
     std::strcpy(dir, orig);
     if (char *slash = std::strrchr(dir, '\\'))
@@ -339,7 +413,7 @@ int main(int argc, char **argv)
     };
     static const uint32_t kFlagBits[] = {ITC_SOURCE_ALPHA, ITC_ALPHA_1BIT, ITC_DITHER, ITC_MIPMAP, ITC_TRUECOLOR,
                                          ITC_KEEP_PIXELS, ITC_HALF, ITC_NORESIZE, ITC_NOCACHE, ITC_COMPRESS};
-    long cases = 0, bad = 0, compressed = 0;
+    long cases = 0, bad = 0, compressed = 0, checkedMips = 0, cachedMips = 0;
     for (int round = 0; round < rounds; ++round) {
         FakeDevice dev;
         const int device = Rand(4);
@@ -381,13 +455,17 @@ int main(int argc, char **argv)
         }
         int wParam = Rand(6) == 0 ? 1 + Rand(100) : 0, hParam = Rand(6) == 0 ? 1 + Rand(100) : 0;
         // Mip maps of a texture with an odd width read bytes the original's filter never writes
-        // (its rows are half the source row apart): only even power-of-2 sizes then.
-        if ((flags & ITC_NORESIZE) && (flags & ITC_MIPMAP)) {
+        // (its rows are half the source row apart): only even power-of-2 sizes then. (The
+        // enhanced modes compare no level of the original's below level 0.)
+        if (!enhanced && (flags & ITC_NORESIZE) && (flags & ITC_MIPMAP)) {
             const int size = 1 << (1 + Rand(6));
             wParam = size;
             hParam = 1 << (1 + Rand(6));
         }
         const int levels = Rand(3) == 0 ? Rand(4) : 0;
+        // TrueColorTextures: what the original makes when asked for ITC_TRUECOLOR (image files).
+        const uint32_t origFlags = flags | (trueColorMode && kind < 7 ? ITC_TRUECOLOR : 0);
+        S_result portFirst;
         // Pass 0 converts the image (no cache files) and writes the cache; pass 1 loads both
         // textures from the cache file the port wrote.
         for (int pass = 0; pass < 2; ++pass) {
@@ -395,7 +473,7 @@ int main(int argc, char **argv)
                 DeleteCaches();
             void *o = OrigCreateITexture();
             const HRESULT ho = (*reinterpret_cast<CreateFn **>(o))[2](o, image.c_str(), alpha.empty() ? nullptr : alpha.c_str(),
-                                                                    flags, wParam, hParam, levels);
+                                                                    origFlags, wParam, hParam, levels);
             const S_result a = Capture(ho, static_cast<uint8_t *>(o));
             if (!pass)
                 DeleteCaches();
@@ -403,6 +481,16 @@ int main(int argc, char **argv)
             const HRESULT hp = p->Create(image.c_str(), alpha.empty() ? nullptr : alpha.c_str(), flags, wParam, hParam, levels);
             const S_result b = Capture(hp, reinterpret_cast<uint8_t *>(p));
             ++cases;
+            // The port's cache file of improved mip levels is named apart from the original's (a
+            // 'G' before the extension), and only that one.
+            bool cacheNamed = true;
+            if (!pass) {
+                for (const std::string &file : CacheFiles()) {
+                    const size_t dot = file.rfind('.');
+                    const bool tagged = dot && file[dot - 1] == 'G';
+                    cacheNamed &= tagged == (enhanced && b.levels > 1);
+                }
+            }
             if (kind < 7 && (a.format == D3DFMT_DXT1 || a.format == D3DFMT_DXT3))
                 ++compressed;                   // through the S3TC encoder
             // Levels after one whose width or height is 1 are not computed by the original (it
@@ -433,9 +521,48 @@ int main(int argc, char **argv)
                 a2.pixels = a.pixels;
                 b2.pixels = b.pixels;
             }
-            const bool same = a.hr == b.hr && a.width == b.width && a.height == b.height && a.format == b.format &&
-                              a.flags == b.flags && a.colorKey == b.colorKey && a.levels == b.levels &&
-                              a.memorySize == b.memorySize && a2.pixels == b2.pixels && a2.data == b2.data;
+            // (Enhanced modes, second pass: a mip-mapped 16-bit / DXT texture of the port's comes from
+            // its own cache file while the original converts the image again. A cache load leaves
+            // the colour key 0, as the original's does, and the DXT3 cache of an opacity-mapped
+            // image, found only after the image's conversion, keeps the converted image.)
+            const bool ownCache = enhanced && pass == 1 && kind < 7 && b.levels > 1 && b.format != D3DFMT_A8R8G8B8;
+            bool same = a.hr == b.hr && a.width == b.width && a.height == b.height && a.format == b.format &&
+                        a.flags == b.flags && (a.colorKey == b.colorKey || (ownCache && b.colorKey == 0)) &&
+                        a.levels == b.levels && a.memorySize == b.memorySize &&
+                        (a2.pixels == b2.pixels || (ownCache && !(b.flags & ITC_KEEP_PIXELS)));
+            if (!enhanced || kind >= 7) {
+                same = same && a2.data == b2.data;
+            } else if (same) {
+                // Level 0 as the original's; the levels below by the port's filter.
+                same = a.data.size() == b.data.size() && (b.data.empty() || a.data[0] == b.data[0]);
+                if (same && b.data.size() > 1) {
+                    std::vector<std::vector<uint8_t>> expected;
+                    const bool kept = !(b.flags & ITC_PIXEL_MASK) && b.pixels.size() == size_t(b.width) * b.height * 4;
+                    if (b.format == D3DFMT_A8R8G8B8)
+                        expected = ExpectedMips(b.data[0].data(), b.width, b.height, b.data.size(), b.flags,
+                                                D3DFMT_A8R8G8B8, p);
+                    else if (kept && !FakeIsDxt(D3DFORMAT(b.format)))
+                        expected = ExpectedMips(b.pixels.data(), b.width, b.height, b.data.size(), b.flags,
+                                                D3DFORMAT(b.format), p);
+                    if (!expected.empty()) {
+                        ++checkedMips;
+                        same = std::equal(expected.begin(), expected.end(), b.data.begin() + 1);
+                    }
+                    if (pass == 1) {
+                        cachedMips += b.format != D3DFMT_A8R8G8B8;     // (32-bit textures have no cache)
+                        same = same && b.data == portFirst.data;
+                    }
+                }
+            }
+            if (!cacheNamed) {
+                same = false;
+                std::printf("case %d.%d: cache file name (levels %d):", round, pass, b.levels);
+                for (const std::string &file : CacheFiles())
+                    std::printf(" %s", file.c_str());
+                std::printf("\n");
+            }
+            if (!pass)
+                portFirst = b;
             if (!same) {
                 ++bad;
                 if (bad <= 12) {
@@ -459,6 +586,9 @@ int main(int argc, char **argv)
         }
     }
     DeleteCaches();
+    if (enhanced)
+        std::printf("%s: %ld mip chains checked against DownsampleMip, %ld against the port's cache\n", mode.c_str(),
+                    checkedMips, cachedMips);
     std::printf("texture: %ld cases (%ld compressed), %ld differ\n", cases, compressed, bad);
     return bad ? 1 : 0;
 }
