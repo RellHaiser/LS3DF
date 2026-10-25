@@ -150,15 +150,13 @@ IGraph::IGraph()
     g_pDevice = nullptr;
     std::memset(&g_viewport, 0, sizeof g_viewport);
 
-    // 0x100d1ba0: diffuse and ambient white, no specular, emissive white, power 0.
+    // 0x100d1ba0: diffuse, ambient and specular white, no emissive, power 0. (D3DMATERIAL8 keeps
+    // specular at +0x20 and emissive at +0x30: a white emissive washes every lit vertex out.)
     float *m = reinterpret_cast<float *>(&g_defaultMaterial);
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 12; ++i)
         m[i] = 1.0f;
-    for (int i = 8; i < 12; ++i)
+    for (int i = 12; i < 17; ++i)
         m[i] = 0.0f;
-    for (int i = 12; i < 16; ++i)
-        m[i] = 1.0f;
-    m[16] = 0.0f;
 
     g_maxTextureWidth = 0;
     g_maxTextureHeight = 0;

@@ -320,6 +320,11 @@ int main(int argc, char **argv)
     g_base = reinterpret_cast<uint8_t *>(dll);
     g_origIGraph = reinterpret_cast<void *(__cdecl *)()>(GetProcAddress(dll, "GetIGraph"))();
     g_pIGraph = new IGraph;
+    // The constructors' default material (the renderer's, for meshes without colors of their own).
+    if (std::memcmp(&ls3d::ig::g_defaultMaterial, &Orig<D3DMATERIAL8>(0x100d1ba0), sizeof(D3DMATERIAL8))) {
+        std::printf("IGraph's default material differs from the original's\n");
+        return 1;
+    }
     ls3d::g_logDisabled = true;
     Orig<uint8_t>(0x100d16f2) = 1;              // the original's log off too
 

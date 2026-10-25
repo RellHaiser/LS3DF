@@ -88,7 +88,7 @@ extern S_stateCache g_rs;
 extern int g_zBufferType;
 
 // The renderer's material for meshes without colors of their own (0x100d1ba0: white diffuse,
-// ambient and emissive, no specular).
+// ambient and specular, no emissive).
 extern D3DMATERIAL8 g_defaultMaterial;
 
 // Textures (LoadTexture shares the cached ones), video players.
