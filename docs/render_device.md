@@ -7,7 +7,8 @@ therefore makes exactly the Direct3D calls it made before, in the same order wit
 arguments, and the differential tests still compare equal.
 
 This is the first step towards other backends (a modern graphics API, other operating systems).
-It moves no pixels and changes no behaviour; it only makes Direct3D replaceable.
+It moves no pixels and changes no behaviour; it only makes Direct3D replaceable. Sound has the same
+kind of seam: [the sound device](sound_device.md).
 
 ## Design
 

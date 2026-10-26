@@ -57,7 +57,7 @@ ISND_sound::~ISND_sound()
 {
     Stop();
     if (buffer) {
-        buffer->Release();
+        audio::g_pAudio->Release(buffer);
         buffer = nullptr;
     }
     if (source) {
@@ -85,7 +85,7 @@ HRESULT ISND_sound::Open(ISND_source *newSource, uint32_t openFlags)
 {
     Stop();
     if (buffer) {
-        buffer->Release();
+        audio::g_pAudio->Release(buffer);
         buffer = nullptr;
     }
     if (source) {
@@ -95,7 +95,7 @@ HRESULT ISND_sound::Open(ISND_source *newSource, uint32_t openFlags)
     flags = 0;
     if (!newSource->buffer)
         return I3DERR_GENERIC;
-    const HRESULT hr = g_sndDriver->dsound->DuplicateSoundBuffer(newSource->buffer, &buffer);
+    const HRESULT hr = audio::g_pAudio->DuplicateSoundBuffer(g_sndDriver->dsound, newSource->buffer, &buffer);
     if (FAILED(hr)) {
         TraceDSErrors(hr);
         return I3DERR_GENERIC;
@@ -110,7 +110,7 @@ HRESULT ISND_sound::Close()
 {
     Stop();
     if (buffer) {
-        buffer->Release();
+        audio::g_pAudio->Release(buffer);
         buffer = nullptr;
     }
     if (source) {
@@ -127,7 +127,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
         return I3DERR_GENERIC;
     const bool keepPosition = (playFlags & ISNDP_KEEP_POSITION) != 0;
     if (!keepPosition)
-        buffer->SetCurrentPosition(0);
+        audio::g_pAudio->SetCurrentPosition(buffer, 0);
 
     DWORD dsFlags = 0;
     DWORD dsPriority = 0;
@@ -172,7 +172,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                         --i;
                         S_voice &voice = g_voices[i];
                         DWORD status = 0;
-                        voice.buffer->GetStatus(&status);
+                        audio::g_pAudio->GetStatus(voice.buffer, &status);
                         if (!(status & DSBSTATUS_PLAYING)) {
                             victim = &voice;
                             break;
@@ -191,7 +191,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                         suspended.buffer = buffer;
                         suspended.priority = priority;
                         suspended.loop = playFlags & ISNDP_LOOP;
-                        buffer->GetCurrentPosition(&suspended.position, nullptr);
+                        audio::g_pAudio->GetCurrentPosition(buffer, &suspended.position, nullptr);
                         suspended.suspendTime = timeGetTime();
                         g_suspendedVoices.PushBack(suspended);
                         return I3D_OK;
@@ -202,10 +202,10 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                     suspended.loop = victim->loop;
                     // (The original reads the play cursor of this sound's buffer, not the
                     // suspended one's; kept.)
-                    buffer->GetCurrentPosition(&suspended.position, nullptr);
+                    audio::g_pAudio->GetCurrentPosition(buffer, &suspended.position, nullptr);
                     suspended.suspendTime = timeGetTime();
                     g_suspendedVoices.PushBack(suspended);
-                    victim->buffer->Stop();
+                    audio::g_pAudio->Stop(victim->buffer);
 
                     victim->sound = this;
                     victim->priority = priority;
@@ -222,7 +222,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
     }
 
     const bool loop = (playFlags & ISNDP_LOOP) != 0;
-    if (SUCCEEDED(buffer->Play(0, dsPriority, loop ? dsFlags | DSBPLAY_LOOPING : dsFlags)))
+    if (SUCCEEDED(audio::g_pAudio->Play(buffer, 0, dsPriority, loop ? dsFlags | DSBPLAY_LOOPING : dsFlags)))
         return I3D_OK;
     if (ig::g_logSoundFailures) {
         ISND_source *playing = GetSource();
@@ -234,7 +234,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
     }
     // Again in software.
     const DWORD retryFlags = loop ? DSBPLAY_LOOPING | DSBPLAY_LOCSOFTWARE : DSBPLAY_LOCSOFTWARE;
-    return SUCCEEDED(buffer->Play(0, 0, retryFlags)) ? I3D_OK : I3DERR_GENERIC;
+    return SUCCEEDED(audio::g_pAudio->Play(buffer, 0, 0, retryFlags)) ? I3D_OK : I3DERR_GENERIC;
 }
 
 HRESULT ISND_sound::OpenAndPlay(ISND_source *newSource, uint32_t openFlags)
@@ -250,7 +250,7 @@ HRESULT ISND_sound::Stop()
     flags &= ~ISNDF_PAUSED;
     if (!buffer)
         return I3DERR_GENERIC;
-    buffer->Stop();
+    audio::g_pAudio->Stop(buffer);
     if (IsManaged(this)) {
         const int index = FindVoice(this);
         if (index >= 0)
@@ -267,7 +267,7 @@ int ISND_sound::GetPlayPosition()
     if (!buffer)
         return 0;
     DWORD position = 0;
-    buffer->GetCurrentPosition(&position, nullptr);
+    audio::g_pAudio->GetCurrentPosition(buffer, &position, nullptr);
     return Ftol(static_cast<float>(static_cast<double>(position) / source->bytesPerMs));
 }
 
@@ -276,7 +276,7 @@ HRESULT ISND_sound::SetPlayPosition(int position)
     if (!buffer)
         return I3DERR_GENERIC;
     if (position == ISND_PAUSE) {
-        buffer->Stop();
+        audio::g_pAudio->Stop(buffer);
         flags |= ISNDF_PAUSED;
         if (IsManaged(this)) {
             const int index = FindVoice(this);
@@ -288,7 +288,7 @@ HRESULT ISND_sound::SetPlayPosition(int position)
     if (position == ISND_RESUME) {
         if (flags & ISNDF_PAUSED) {
             // (Resumes without DSBPLAY_LOOPING: a paused looping sound plays to its end once; kept.)
-            buffer->Play(0, 0, 0);
+            audio::g_pAudio->Play(buffer, 0, 0, 0);
             flags &= ~ISNDF_PAUSED;
             const int index = FindVoice(this);
             if (index >= 0) {
@@ -300,7 +300,8 @@ HRESULT ISND_sound::SetPlayPosition(int position)
         return I3D_OK;
     }
 
-    buffer->SetCurrentPosition(static_cast<DWORD>(MsToBufferOffset(source, static_cast<uint32_t>(position))));
+    audio::g_pAudio->SetCurrentPosition(buffer,
+                                        static_cast<DWORD>(MsToBufferOffset(source, static_cast<uint32_t>(position))));
     if (IsManaged(this)) {
         const int index = FindVoice(this);
         if (index >= 0)
@@ -322,14 +323,14 @@ HRESULT ISND_sound::SetVolume(float value)
     if (level < 1e-8f) {
         millibels = DSBVOLUME_MIN;
     } else if (!(level < 1.0f)) {
-        buffer->SetVolume(DSBVOLUME_MAX);
+        audio::g_pAudio->SetVolume(buffer, DSBVOLUME_MAX);
         return I3D_OK;
     } else {
         millibels = Ftol(static_cast<float>(std::log(static_cast<double>(level)) * 866.0));
         if (millibels < DSBVOLUME_MIN)
             millibels = DSBVOLUME_MIN;
     }
-    buffer->SetVolume(millibels);
+    audio::g_pAudio->SetVolume(buffer, millibels);
     return I3D_OK;
 }
 
@@ -340,12 +341,12 @@ HRESULT ISND_sound::SetVolumeDb(int millibels)
     const int master = Ftol(static_cast<float>(std::log(static_cast<double>(g_sndDriver->volume)) * -866.0));
     int level = millibels - master;
     if (level < DSBVOLUME_MIN) {
-        buffer->SetVolume(DSBVOLUME_MIN);
+        audio::g_pAudio->SetVolume(buffer, DSBVOLUME_MIN);
         return I3D_OK;
     }
     if (level > 0)
         level = 0;
-    buffer->SetVolume(level);
+    audio::g_pAudio->SetVolume(buffer, level);
     return I3D_OK;
 }
 
@@ -354,7 +355,7 @@ HRESULT ISND_sound::SetVolumeLinear(float value)
     volume = value;
     if ((flags & ISNDF_NO_VOLUME) || !buffer)
         return I3DERR_GENERIC;
-    buffer->SetVolume(Ftol((1.0f - value * g_sndDriver->volume) * -10000.0f));
+    audio::g_pAudio->SetVolume(buffer, Ftol((1.0f - value * g_sndDriver->volume) * -10000.0f));
     return I3D_OK;
 }
 
@@ -369,7 +370,7 @@ HRESULT ISND_sound::SetFrequency(float ratio)
     if (hz < g_sndDriver->minFrequency)
         hz = g_sndDriver->minFrequency;
     frequency = static_cast<float>(hz) / rate;
-    buffer->SetFrequency(hz);
+    audio::g_pAudio->SetFrequency(buffer, hz);
     return I3D_OK;
 }
 
@@ -378,18 +379,18 @@ HRESULT ISND_sound::SetPan(float pan)
     if ((flags & ISNDF_NO_PAN) || !buffer)
         return I3DERR_GENERIC;
     if (std::fabs(pan) < 1e-8f) {
-        buffer->SetPan(DSBPAN_CENTER);
+        audio::g_pAudio->SetPan(buffer, DSBPAN_CENTER);
         return I3D_OK;
     }
     // (A negative pan gives NaN, converted to 0: centre.)
     int value = Ftol(static_cast<float>(std::log(static_cast<double>(pan)) * 866.0));
     if (value > DSBPAN_RIGHT) {
-        buffer->SetPan(DSBPAN_RIGHT);
+        audio::g_pAudio->SetPan(buffer, DSBPAN_RIGHT);
         return I3D_OK;
     }
     if (value < DSBPAN_LEFT)
         value = DSBPAN_LEFT;
-    buffer->SetPan(value);
+    audio::g_pAudio->SetPan(buffer, value);
     return I3D_OK;
 }
 
@@ -402,7 +403,7 @@ bool ISND_sound::IsPlaying()
     if (FindSuspendedVoice(this) >= 0)
         return true;
     DWORD status = 0;
-    buffer->GetStatus(&status);
+    audio::g_pAudio->GetStatus(buffer, &status);
     return (status & DSBSTATUS_PLAYING) != 0;
 }
 
@@ -425,17 +426,17 @@ ISND_3Dsound::~ISND_3Dsound()
 HRESULT ISND_3Dsound::Open(ISND_source *newSource, uint32_t openFlags)
 {
     if (buffer3D) {
-        buffer3D->Release();
+        audio::g_pAudio->Release(buffer3D);
         buffer3D = nullptr;
     }
     const HRESULT hr = ISND_sound::Open(newSource, openFlags);
     if (hr != I3D_OK)
         return hr;
     if (openFlags & ISNDF_3D) {
-        if (FAILED(buffer->QueryInterface(IID_IDirectSound3DBuffer, reinterpret_cast<void **>(&buffer3D))))
+        if (FAILED(audio::g_pAudio->Query(buffer, &buffer3D)))
             return I3DERR_GENERIC;
     } else if (buffer3D) {
-        buffer3D->Release();
+        audio::g_pAudio->Release(buffer3D);
         buffer3D = nullptr;
     }
     open = true;
@@ -446,7 +447,7 @@ HRESULT ISND_3Dsound::Close()
 {
     open = false;
     if (buffer3D) {
-        buffer3D->Release();
+        audio::g_pAudio->Release(buffer3D);
         buffer3D = nullptr;
     }
     ISND_sound::Close();
@@ -460,21 +461,22 @@ bool ISND_3Dsound::IsOpen()
 
 HRESULT ISND_3Dsound::SetPosition(const S_vector &position)
 {
-    if (buffer3D && FAILED(buffer3D->SetPosition(position.x, position.y, position.z, DS3D_IMMEDIATE)))
+    if (buffer3D && FAILED(audio::g_pAudio->SetPosition(buffer3D, position.x, position.y, position.z, DS3D_IMMEDIATE)))
         return I3DERR_GENERIC;
     return I3D_OK;
 }
 
 HRESULT ISND_3Dsound::SetConeOrientation(const S_vector &direction)
 {
-    if (buffer3D && FAILED(buffer3D->SetConeOrientation(direction.x, direction.y, direction.z, DS3D_IMMEDIATE)))
+    if (buffer3D &&
+        FAILED(audio::g_pAudio->SetConeOrientation(buffer3D, direction.x, direction.y, direction.z, DS3D_IMMEDIATE)))
         return I3DERR_GENERIC;
     return I3D_OK;
 }
 
 HRESULT ISND_3Dsound::SetVelocity(const S_vector &velocity)
 {
-    if (buffer3D && FAILED(buffer3D->SetVelocity(velocity.x, velocity.y, velocity.z, DS3D_IMMEDIATE)))
+    if (buffer3D && FAILED(audio::g_pAudio->SetVelocity(buffer3D, velocity.x, velocity.y, velocity.z, DS3D_IMMEDIATE)))
         return I3DERR_GENERIC;
     return I3D_OK;
 }
@@ -482,9 +484,9 @@ HRESULT ISND_3Dsound::SetVelocity(const S_vector &velocity)
 HRESULT ISND_3Dsound::SetDistances(float minDistance, float maxDistance)
 {
     if (buffer3D) {
-        if (FAILED(buffer3D->SetMinDistance(minDistance, DS3D_IMMEDIATE)))
+        if (FAILED(audio::g_pAudio->SetMinDistance(buffer3D, minDistance, DS3D_IMMEDIATE)))
             return I3DERR_GENERIC;
-        if (FAILED(buffer3D->SetMaxDistance(maxDistance, DS3D_IMMEDIATE)))
+        if (FAILED(audio::g_pAudio->SetMaxDistance(buffer3D, maxDistance, DS3D_IMMEDIATE)))
             return I3DERR_GENERIC;
     }
     return I3D_OK;
@@ -497,7 +499,7 @@ HRESULT ISND_3Dsound::SetConeAngles(float inside, float outside)
     if (buffer3D) {
         const DWORD outsideDegrees = static_cast<DWORD>(Ftol(outside * kDegreesPerRadian));
         const DWORD insideDegrees = static_cast<DWORD>(Ftol(inside * kDegreesPerRadian));
-        if (FAILED(buffer3D->SetConeAngles(insideDegrees, outsideDegrees, DS3D_IMMEDIATE)))
+        if (FAILED(audio::g_pAudio->SetConeAngles(buffer3D, insideDegrees, outsideDegrees, DS3D_IMMEDIATE)))
             return I3DERR_GENERIC;
     }
     return I3D_OK;
@@ -505,7 +507,8 @@ HRESULT ISND_3Dsound::SetConeAngles(float inside, float outside)
 
 HRESULT ISND_3Dsound::SetConeOutsideVolume(float value)
 {
-    if (buffer3D && FAILED(buffer3D->SetConeOutsideVolume(Ftol((1.0f - value) * -10000.0f), DS3D_IMMEDIATE)))
+    if (buffer3D &&
+        FAILED(audio::g_pAudio->SetConeOutsideVolume(buffer3D, Ftol((1.0f - value) * -10000.0f), DS3D_IMMEDIATE)))
         return I3DERR_GENERIC;
     return I3D_OK;
 }

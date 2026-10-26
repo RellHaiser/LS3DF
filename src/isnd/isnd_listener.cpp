@@ -9,11 +9,11 @@ using namespace ls3d;
 
 namespace {
 
-// The value of the last SetEaxProperty (0x100d2c00): IKsPropertySet::Set reads it from memory.
+// The value of the last SetEaxProperty (0x100d2c00): the property set's Set reads it from memory.
 uint32_t g_eaxValue;
 
 // The driver's EAX property set, when EAX is in use.
-IKsPropertySet *EaxListener()
+audio::PropertySet *EaxListener()
 {
     if (!g_sndDriver->eax || (g_sndDriver->flags & ISND_INIT_NO_EAX))
         return nullptr;
@@ -86,19 +86,19 @@ HRESULT ISND_3Dlistener::SetRolloffFactor(float factor)
 
 HRESULT ISND_3Dlistener::SetEaxProperty(uint32_t property, uintptr_t value)
 {
-    IKsPropertySet *eax = EaxListener();
+    audio::PropertySet *eax = EaxListener();
     if (!eax)
         return I3DERR_UNSUPPORTED;
     g_eaxValue = static_cast<uint32_t>(value);
     switch (property) {
     case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 9: case 10: case 11: case 12:
     case 14: case 15: case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24: case 25:
-        eax->Set(snd::kEaxListenerProperties, property, nullptr, 0, &g_eaxValue, sizeof g_eaxValue);
+        audio::g_pAudio->Set(eax, snd::kEaxListenerProperties, property, nullptr, 0, &g_eaxValue, sizeof g_eaxValue);
         break;
     case snd::kEaxListenerReflectionsPan:
     case snd::kEaxListenerReverbPan:
-        eax->Set(snd::kEaxListenerProperties, property, nullptr, 0, reinterpret_cast<void *>(value),
-                 sizeof(snd::S_eaxVector));
+        audio::g_pAudio->Set(eax, snd::kEaxListenerProperties, property, nullptr, 0, reinterpret_cast<void *>(value),
+                             sizeof(snd::S_eaxVector));
         break;
     default:
         break;
@@ -108,28 +108,29 @@ HRESULT ISND_3Dlistener::SetEaxProperty(uint32_t property, uintptr_t value)
 
 HRESULT ISND_3Dlistener::SetEaxData(uint32_t property, void *data, uint32_t size)
 {
-    IKsPropertySet *eax = EaxListener();
+    audio::PropertySet *eax = EaxListener();
     if (!eax)
         return I3DERR_UNSUPPORTED;
-    eax->Set(snd::kEaxListenerProperties, property, nullptr, 0, data, size);
+    audio::g_pAudio->Set(eax, snd::kEaxListenerProperties, property, nullptr, 0, data, size);
     return I3D_OK;
 }
 
 HRESULT ISND_3Dlistener::GetEaxData(uint32_t property, void *data, uint32_t size, ULONG *returned)
 {
-    IKsPropertySet *eax = EaxListener();
+    audio::PropertySet *eax = EaxListener();
     if (!eax)
         return I3DERR_UNSUPPORTED;
-    eax->Get(snd::kEaxListenerProperties, property, nullptr, 0, data, size, returned);
+    audio::g_pAudio->Get(eax, snd::kEaxListenerProperties, property, nullptr, 0, data, size, returned);
     return I3D_OK;
 }
 
 HRESULT ISND_3Dlistener::Apply()
 {
-    return SUCCEEDED(g_sndDriver->listener->SetAllParameters(&params, DS3D_IMMEDIATE)) ? I3D_OK : I3DERR_GENERIC;
+    const HRESULT hr = audio::g_pAudio->SetAllParameters(g_sndDriver->listener, &params, DS3D_IMMEDIATE);
+    return SUCCEEDED(hr) ? I3D_OK : I3DERR_GENERIC;
 }
 
 HRESULT ISND_3Dlistener::Commit()
 {
-    return SUCCEEDED(g_sndDriver->listener->CommitDeferredSettings()) ? I3D_OK : I3DERR_GENERIC;
+    return SUCCEEDED(audio::g_pAudio->CommitDeferredSettings(g_sndDriver->listener)) ? I3D_OK : I3DERR_GENERIC;
 }

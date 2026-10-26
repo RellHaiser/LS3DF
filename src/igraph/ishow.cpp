@@ -5,7 +5,6 @@
 #include <cstring>
 
 #include <dshow.h>
-#include <dsound.h>
 
 #include "core/debug.h"
 #include "core/fpu.h"
@@ -131,6 +130,14 @@ template <class T> void SafeRelease(T *&p)
         p = nullptr;
     }
 }
+// The same for the sound device's handles.
+template <class T> void SafeReleaseAudio(T *&p)
+{
+    if (p) {
+        audio::g_pAudio->Release(p);
+        p = nullptr;
+    }
+}
 
 }  // namespace
 
@@ -201,22 +208,22 @@ void IShow::FillBuffer(bool whole)
     void *data;
     DWORD size;
     if (whole) {
-        if (buffer->Lock(0, 0, &data, &size, nullptr, nullptr, DSBLOCK_ENTIREBUFFER) >= 0) {
+        if (audio::g_pAudio->Lock(buffer, 0, 0, &data, &size, nullptr, nullptr, DSBLOCK_ENTIREBUFFER) >= 0) {
             Decode(this, static_cast<char *>(data), static_cast<int>(size), false);
-            buffer->Unlock(data, size, nullptr, 0);
+            audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0);
             writePos = 0;
         }
         filling = false;
         return;
     }
     DWORD play;
-    if (buffer->GetCurrentPosition(&play, nullptr) < 0) {
+    if (audio::g_pAudio->GetCurrentPosition(buffer, &play, nullptr) < 0) {
         filling = false;
         return;
     }
     if (static_cast<int>(play) < writePos) {
         // Wrapped: up to the end of the buffer first.
-        if (buffer->Lock(writePos, bufferSize - writePos, &data, &size, nullptr, nullptr, 0) < 0) {
+        if (audio::g_pAudio->Lock(buffer, writePos, bufferSize - writePos, &data, &size, nullptr, nullptr, 0) < 0) {
             filling = false;
             return;
         }
@@ -225,10 +232,10 @@ void IShow::FillBuffer(bool whole)
             std::memset(data, 0, size);
         else
             Decode(this, static_cast<char *>(data), static_cast<int>(size), true);
-        buffer->Unlock(data, size, nullptr, 0);
+        audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0);
     }
     if (static_cast<int>(play) > writePos) {
-        if (buffer->Lock(writePos, play - writePos, &data, &size, nullptr, nullptr, 0) < 0) {
+        if (audio::g_pAudio->Lock(buffer, writePos, play - writePos, &data, &size, nullptr, nullptr, 0) < 0) {
             filling = false;
             return;
         }
@@ -237,7 +244,7 @@ void IShow::FillBuffer(bool whole)
             std::memset(data, 0, size);
         else
             Decode(this, static_cast<char *>(data), static_cast<int>(size), true);
-        buffer->Unlock(data, size, nullptr, 0);
+        audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0);
     }
     filling = false;
 }
@@ -256,8 +263,8 @@ DWORD WINAPI IShow::StreamThread(void *param)
             continue;
         if (++show->notifyCount > 10) {
             if (show->flags & ISHOWF_END) {
-                show->buffer->Stop();
-                show->buffer->SetCurrentPosition(0);
+                audio::g_pAudio->Stop(show->buffer);
+                audio::g_pAudio->SetCurrentPosition(show->buffer, 0);
                 show->flags &= ~(ISHOWF_END | ISHOWF_PLAYING | ISHOWF_FILLED);
             }
             show->notifyCount = 0;
@@ -362,14 +369,14 @@ HRESULT __stdcall IShow::Open(const char *fileName, uint32_t openFlags)
         desc.dwFlags = DSBCAPS_GETCURRENTPOSITION2 | DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_CTRLVOLUME;
         desc.dwBufferBytes = kStreamBufferSize;
         desc.lpwfxFormat = &format;
-        IDirectSoundBuffer *plain;
-        if (g_sndDriver->dsound->CreateSoundBuffer(&desc, &plain, nullptr) < 0)
+        audio::Buffer *plain;
+        if (audio::g_pAudio->CreateSoundBuffer(g_sndDriver->dsound, &desc, &plain) < 0)
             return I3DERR_GENERIC;
-        const HRESULT hr = plain->QueryInterface(IID_IDirectSoundBuffer8, reinterpret_cast<void **>(&buffer));
-        plain->Release();               // (the original leaked it when the query failed)
+        const HRESULT hr = audio::g_pAudio->Query(plain, &buffer);
+        audio::g_pAudio->Release(plain); // (the original leaked it when the query failed)
         if (hr < 0)
             return I3DERR_GENERIC;
-        if (buffer->QueryInterface(IID_IDirectSoundNotify, reinterpret_cast<void **>(&notify)) < 0)
+        if (audio::g_pAudio->Query(buffer, &notify) < 0)
             return I3DERR_GENERIC;
         event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
         DSBPOSITIONNOTIFY positions[kNotifyCount];
@@ -379,19 +386,20 @@ HRESULT __stdcall IShow::Open(const char *fileName, uint32_t openFlags)
             positions[n].hEventNotify = event;
             ++n;
         }
-        if (notify->SetNotificationPositions(kNotifyCount, positions) < 0)
+        if (audio::g_pAudio->SetNotificationPositions(notify, kNotifyCount, positions) < 0)
             return I3DERR_GENERIC;
         filling = false;
         FillBuffer(true);
         flags |= ISHOWF_FILLED;
-        buffer->SetCurrentPosition(0);
+        audio::g_pAudio->SetCurrentPosition(buffer, 0);
         notifyCount = 0;
         writePos = 0;
         thread = CreateThread(nullptr, 0, StreamThread, this, 0, &threadId);
         flags |= ISHOWF_OGG;
     } else if (std::strstr(fileName, ".bik") || std::strstr(fileName, ".BIK")) {
         if (g_sndDriver->IsInitialized())
-            BinkSetSoundSystem(BinkOpenDirectSound, reinterpret_cast<uint32_t>(g_sndDriver->dsound));
+            BinkSetSoundSystem(BinkOpenDirectSound,
+                               reinterpret_cast<uint32_t>(audio::g_pAudio->Native(g_sndDriver->dsound)));
         bink = BinkOpen(fileName, 0);
         if (!bink) {
             dbgPrintf("ERROR! IShow::Open() - %s", fileName);
@@ -456,8 +464,8 @@ HRESULT __stdcall IShow::Close()
     }
     // Fix: the original kept (leaked) the streaming buffer and its notification interface; the
     // next Ogg file creates new ones.
-    SafeRelease(notify);
-    SafeRelease(buffer);
+    SafeReleaseAudio(notify);
+    SafeReleaseAudio(buffer);
     frameCount = 0;
     open = false;
     return 0;
@@ -488,7 +496,7 @@ HRESULT __stdcall IShow::Play()
                     SetPosition(0);
                 }
             }
-            buffer->Play(0, 0, DSBPLAY_LOOPING);
+            audio::g_pAudio->Play(buffer, 0, 0, DSBPLAY_LOOPING);
             flags = (flags & ~(ISHOWF_END | ISHOWF_PAUSED)) | ISHOWF_PLAYING;
         }
         return 0;
@@ -509,8 +517,8 @@ HRESULT __stdcall IShow::Stop()
         return 0;
     }
     if (flags & ISHOWF_OGG) {
-        buffer->Stop();
-        buffer->SetCurrentPosition(0);
+        audio::g_pAudio->Stop(buffer);
+        audio::g_pAudio->SetCurrentPosition(buffer, 0);
         flags &= ~(ISHOWF_END | ISHOWF_PLAYING | ISHOWF_PAUSED | ISHOWF_FILLED);
         notifyCount = 0;
         writePos = 0;
@@ -671,7 +679,7 @@ HRESULT __stdcall IShow::SetPosition(int ms)
     }
     if (flags & ISHOWF_OGG) {
         if (flags & ISHOWF_PLAYING)
-            buffer->Stop();
+            audio::g_pAudio->Stop(buffer);
         const float seconds = static_cast<float>(static_cast<double>(static_cast<uint32_t>(ms)) * 0.001f);
         if (ov_time_seek(vorbis, seconds) != 0)
             return I3DERR_GENERIC;
@@ -679,9 +687,9 @@ HRESULT __stdcall IShow::SetPosition(int ms)
         filling = false;
         FillBuffer(true);
         flags |= ISHOWF_FILLED;
-        buffer->SetCurrentPosition(0);
+        audio::g_pAudio->SetCurrentPosition(buffer, 0);
         if (flags & ISHOWF_PLAYING) {
-            buffer->Play(0, 0, DSBPLAY_LOOPING);
+            audio::g_pAudio->Play(buffer, 0, 0, DSBPLAY_LOOPING);
             return 0;
         }
         flags |= ISHOWF_PAUSED;
@@ -717,7 +725,7 @@ HRESULT __stdcall IShow::GetPosition(int *ms)
     }
     if (flags & ISHOWF_OGG) {
         DWORD play;
-        if (buffer->GetCurrentPosition(&play, nullptr) < 0)
+        if (audio::g_pAudio->GetCurrentPosition(buffer, &play, nullptr) < 0)
             return I3DERR_GENERIC;
         *ms = Ftol(static_cast<float>(ov_time_tell(vorbis) * 1000.0));
         return 0;
@@ -752,7 +760,7 @@ HRESULT __stdcall IShow::SetVolume(float v)
         db = 0;
     }
     if (flags & ISHOWF_OGG)
-        buffer->SetVolume(db);
+        audio::g_pAudio->SetVolume(buffer, db);
     else
         audio->put_Volume(db);
     return 0;

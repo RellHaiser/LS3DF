@@ -447,16 +447,16 @@ void I3D_sound::Refresh()
         switch (soundType) {
         case I3DSOUND_NONE:
             if (sourceFlags & ISNDF_3D)
-                sound->buffer3D->SetMode(DS3DMODE_DISABLE, DS3D_IMMEDIATE);
+                audio::g_pAudio->SetMode(sound->buffer3D, DS3DMODE_DISABLE, DS3D_IMMEDIATE);
             SetOn(false);
             return;
         case I3DSOUND_POINT:
         case I3DSOUND_SPOT:
-            sound->buffer3D->SetMode(DS3DMODE_NORMAL, DS3D_IMMEDIATE);
+            audio::g_pAudio->SetMode(sound->buffer3D, DS3DMODE_NORMAL, DS3D_IMMEDIATE);
             break;
         case I3DSOUND_AMBIENT:
             if (sourceFlags & ISNDF_3D)
-                sound->buffer3D->SetMode(DS3DMODE_DISABLE, DS3D_IMMEDIATE);
+                audio::g_pAudio->SetMode(sound->buffer3D, DS3DMODE_DISABLE, DS3D_IMMEDIATE);
             break;
         default:
             break;

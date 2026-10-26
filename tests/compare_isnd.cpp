@@ -7,6 +7,7 @@
 // Usage: compare_isnd.exe [original LS3DF.dll] [rounds] [seed]
 //
 // test-sources: src/isnd/*.cpp src/core/debug.cpp
+// test-sources: src/audio/dsound/audio_dsound.cpp
 #include <windows.h>
 
 #include <float.h>
@@ -21,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "../src/audio/dsound/dsound_device.h"
 #include "../src/core/debug.h"
 #include "../src/isnd/isnd.h"
 #include "../src/isnd/isnd_voices.h"
@@ -357,10 +359,12 @@ struct World {
         std::vsnprintf(text, sizeof text, fmt, args);
         log.push_back(std::string(prefix) + text);
     }
-    int IdOf(IUnknown *p) const
+    // (The port's objects hold the sound device's handles, which are the fakes' interfaces.)
+    int IdOf(const void *p) const
     {
         for (const FakeBuffer *b : buffers) {
-            if (static_cast<const IDirectSoundBuffer8 *>(b) == p || static_cast<const IDirectSound3DBuffer *>(b) == p)
+            if (static_cast<const void *>(static_cast<const IDirectSoundBuffer8 *>(b)) == p ||
+                static_cast<const void *>(static_cast<const IDirectSound3DBuffer *>(b)) == p)
                 return b->id;
         }
         return p ? -2 : -1;
@@ -475,10 +479,11 @@ float RandFloat(float lo, float hi) { return lo + (hi - lo) * static_cast<float>
 
 void Setup(ISND_driver *d, World &w, uint32_t flags)
 {
-    d->dsound = &w.ds;
-    d->eax = &w.props;
-    d->primary = w.primary;
-    d->listener = &w.listener;
+    using ls3d::audio::dsound::Handle;
+    d->dsound = Handle(static_cast<IDirectSound8 *>(&w.ds));
+    d->eax = Handle(static_cast<IKsPropertySet *>(&w.props));
+    d->primary = Handle(static_cast<IDirectSoundBuffer8 *>(w.primary));
+    d->listener = Handle(static_cast<IDirectSound3DListener *>(&w.listener));
     d->flags = flags;
     d->volume = 1.0f;
     d->maxFrequency = 100000;
@@ -941,8 +946,8 @@ void ListenerTest(int rounds)
                 g_orig.driver->eax = nullptr;
                 g_port.driver->eax = nullptr;
             } else {
-                g_orig.driver->eax = &g_origWorld.props;
-                g_port.driver->eax = &g_portWorld.props;
+                g_orig.driver->eax = ls3d::audio::dsound::Handle(&g_origWorld.props);
+                g_port.driver->eax = ls3d::audio::dsound::Handle(&g_portWorld.props);
             }
             break;
         }
@@ -965,8 +970,8 @@ void ListenerTest(int rounds)
     }
     Check("Release", a->Release(), b->Release());
     g_orig.driver->flags = g_port.driver->flags = 0;
-    g_orig.driver->eax = &g_origWorld.props;
-    g_port.driver->eax = &g_portWorld.props;
+    g_orig.driver->eax = ls3d::audio::dsound::Handle(&g_origWorld.props);
+    g_port.driver->eax = ls3d::audio::dsound::Handle(&g_portWorld.props);
     CompareState();
 }
 

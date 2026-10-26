@@ -24,10 +24,12 @@ struct IMediaControl;
 struct IMediaSeeking;
 struct IBasicAudio;
 struct IMediaEvent;
-struct IDirectSoundNotify;
-struct IDirectSoundBuffer8;
 struct OggVorbis_File;
 struct BINK;
+namespace ls3d::audio {
+struct Buffer;
+struct Notify;
+}  // namespace ls3d::audio
 
 // IShow::Open flags (the state bits share the word, IShow::flags).
 enum : uint32_t {
@@ -159,8 +161,8 @@ public:
     DWORD threadId;                                             // +0x60
     HANDLE thread;                                              // +0x64
     HANDLE event;                                               // +0x68 buffer position notifications
-    IDirectSoundNotify *notify;                                 // +0x6C
-    IDirectSoundBuffer8 *buffer;                                // +0x70
+    ls3d::audio::Notify *notify;                                // +0x6C
+    ls3d::audio::Buffer *buffer;                                // +0x70 (DirectSound: its version 8 interface)
     int notifyCount;                                            // +0x74
     int writePos;                                               // +0x78 next byte to fill
     int bufferSize;                                             // +0x7C

@@ -63,7 +63,7 @@ void UpdateVoices()
         if (voice.loop == 0 && voice.pauseTime == 0) {
             const int length = voice.sound->GetSource()->GetLength();
             if (static_cast<int>(now - voice.pausedTotal - voice.startTime) >= length) {
-                voice.buffer->Stop();
+                audio::g_pAudio->Stop(voice.buffer);
                 g_voices.RemoveAtSwap(i);
             }
         }
@@ -122,8 +122,8 @@ void UpdateVoices()
         playFlags = DSBPLAY_LOOPING;
     }
     added.startTime = now - elapsed;
-    resumed.buffer->SetCurrentPosition(static_cast<DWORD>(MsToBufferOffset(source, elapsed)));
-    resumed.buffer->Play(0, 0, playFlags);
+    audio::g_pAudio->SetCurrentPosition(resumed.buffer, static_cast<DWORD>(MsToBufferOffset(source, elapsed)));
+    audio::g_pAudio->Play(resumed.buffer, 0, 0, playFlags);
     g_suspendedVoices.RemoveAtSwap(best);
 }
 

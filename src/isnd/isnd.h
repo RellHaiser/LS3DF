@@ -1,4 +1,5 @@
-// ISND: the engine's DirectSound 8 layer (LS3DF region 0x1007a100 - 0x1007d460). One driver
+// ISND: the engine's sound layer (LS3DF region 0x1007a100 - 0x1007d460), on DirectSound 8 through the
+// sound device (audio/audio.h). One driver
 // (ISndGetDriver()) creates sources (a .wav file loaded into a static buffer), sounds (a
 // duplicate of a source's buffer that plays) and the 3D listener. Sounds that play on hardware
 // channels go through a voice manager (isnd_voices.cpp) that suspends the least important ones
@@ -11,12 +12,8 @@
 #include <cstdint>
 
 #include <windows.h>
-#include <mmreg.h>
-#ifndef DIRECTSOUND_VERSION
-#define DIRECTSOUND_VERSION 0x0800
-#endif
-#include <dsound.h>
 
+#include "audio/audio.h"
 #include "core/c_str.h"
 #include "core/c_vector.h"
 #include "math/ls3d_math.h"
@@ -75,7 +72,7 @@ struct S_ISND_format {
     uint32_t dataSize;                  // bytes of sample data
 };
 
-// A .wav file in a static DirectSound buffer (vtable 0x1009df00, 0x4C bytes).
+// A .wav file in a static sound buffer (vtable 0x1009df00, 0x4C bytes).
 class ISND_source {
 public:
     ISND_source();                                                          // 0x1007ccf0
@@ -111,7 +108,7 @@ public:
     int bytesPerSample;                         // +0x24
     int frequency;                              // +0x28
     uint32_t dataSize;                          // +0x2C
-    IDirectSoundBuffer8 *buffer;                // +0x30
+    ls3d::audio::Buffer *buffer;                // +0x30 (DirectSound: its version 8 interface)
     float bytesPerMs;                           // +0x34 nAvgBytesPerSec / 1000
     WAVEFORMATEX format;                        // +0x38
 };
@@ -155,7 +152,7 @@ public:
     virtual ~ISND_sound();
 
     int refCount;                               // +0x04
-    IDirectSoundBuffer *buffer;                 // +0x08 the source's buffer duplicated
+    ls3d::audio::Buffer *buffer;                // +0x08 the source's buffer duplicated
     ISND_source *source;                        // +0x0C
     uint32_t flags;                             // +0x10 ISNDF_*
     float frequency;                            // +0x14 ratio set by SetFrequency
@@ -187,10 +184,10 @@ public:
     virtual HRESULT __stdcall SetConeOutsideVolume(float volume);
 
     bool open;                                  // +0x1C
-    IDirectSound3DBuffer8 *buffer3D;            // +0x20
+    ls3d::audio::Buffer3D *buffer3D;            // +0x20
 };
 
-// The listener (vtable 0x1009dcc0, 0x48 bytes): keeps DirectSound's listener parameters and
+// The listener (vtable 0x1009dcc0, 0x48 bytes): keeps the device's listener parameters and
 // writes them with Apply; EAX 3 reverb properties go straight to the driver's property set.
 class ISND_3Dlistener {
 public:
@@ -278,17 +275,17 @@ private:
 public:
     HWND window;                                // +0x04
     int unknown08;                              // +0x08 1, never read
-    IDirectSound8 *dsound;                      // +0x0C
-    IKsPropertySet *eax;                        // +0x10 EAX 3 property set (of eaxBuffer)
-    IDirectSound3DBuffer *eaxBuffer;            // +0x14 a small 3D buffer that carries the property set
+    ls3d::audio::System *dsound;                // +0x0C the device
+    ls3d::audio::PropertySet *eax;              // +0x10 EAX 3 property set (of eaxBuffer)
+    ls3d::audio::Buffer3D *eaxBuffer;           // +0x14 a small 3D buffer that carries the property set
     HMODULE externalModule;                     // +0x18 never set in LS3DF; freed by Close
     uint32_t unknown1C;                         // +0x1C
     // +0x20 Never set in LS3DF either (deleted by Close): a table of functions that IShow's
     // sound methods call (slots 0x5C - 0x78).
     struct S_ISND_externalApi *externalApi;
     uint32_t unknown24;                         // +0x24
-    IDirectSoundBuffer *primary;                // +0x28
-    IDirectSound3DListener8 *listener;          // +0x2C
+    ls3d::audio::Buffer *primary;               // +0x28
+    ls3d::audio::Listener *listener;            // +0x2C
     uint32_t flags;                             // +0x30 ISND_INIT_*
     float volume;                               // +0x34 master volume
     uint32_t maxFrequency;                      // +0x38 secondary buffer rate limits

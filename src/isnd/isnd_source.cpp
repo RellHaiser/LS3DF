@@ -1,4 +1,4 @@
-// ISND_source: a PCM .wav file in a static DirectSound buffer (0x1007ccf0 - 0x1007d460).
+// ISND_source: a PCM .wav file in a static sound buffer (0x1007ccf0 - 0x1007d460).
 #include "isnd/isnd.h"
 
 #include <cstdio>
@@ -51,7 +51,7 @@ ISND_source::ISND_source()
 ISND_source::~ISND_source()
 {
     if (buffer) {
-        buffer->Release();
+        audio::g_pAudio->Release(buffer);
         buffer = nullptr;
     }
     channels = 0;
@@ -138,30 +138,30 @@ HRESULT ISND_source::Open(const char *name, uint32_t openFlags)
     if (bufferFlags & DSBCAPS_CTRL3D)
         desc.guid3DAlgorithm = kNoVirtualization;
 
-    IDirectSoundBuffer *created = nullptr;
-    if (FAILED(g_sndDriver->dsound->CreateSoundBuffer(&desc, &created, nullptr))) {
+    audio::Buffer *created = nullptr;
+    if (FAILED(audio::g_pAudio->CreateSoundBuffer(g_sndDriver->dsound, &desc, &created))) {
         dtaClose(file);
         return I3DERR_GENERIC;
     }
-    if (FAILED(created->QueryInterface(IID_IDirectSoundBuffer8, reinterpret_cast<void **>(&buffer)))) {
-        created->Release();                     // (leaked by the original)
+    if (FAILED(audio::g_pAudio->Query(created, &buffer))) {
+        audio::g_pAudio->Release(created);      // (leaked by the original)
         dtaClose(file);
         return I3DERR_GENERIC;
     }
-    created->Release();
+    audio::g_pAudio->Release(created);
 
     void *data = nullptr;
     DWORD size = 0;
-    if (FAILED(buffer->Lock(0, 0, &data, &size, nullptr, nullptr, DSBLOCK_ENTIREBUFFER))) {
+    if (FAILED(audio::g_pAudio->Lock(buffer, 0, 0, &data, &size, nullptr, nullptr, DSBLOCK_ENTIREBUFFER))) {
         dtaClose(file);
         return I3DERR_GENERIC;
     }
     if (static_cast<uint32_t>(dtaRead(file, data, static_cast<int>(dataSize))) != dataSize) {
-        buffer->Unlock(data, size, nullptr, 0);  // (left locked by the original)
+        audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0); // (left locked by the original)
         dtaClose(file);
         return I3DERR_GENERIC;
     }
-    if (FAILED(buffer->Unlock(data, size, nullptr, 0))) {
+    if (FAILED(audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0))) {
         dtaClose(file);
         return I3DERR_GENERIC;
     }
@@ -179,7 +179,7 @@ HRESULT ISND_source::Open(const char *name, uint32_t openFlags)
 HRESULT ISND_source::Close()
 {
     if (buffer) {
-        buffer->Release();
+        audio::g_pAudio->Release(buffer);
         buffer = nullptr;
     }
     channels = 0;
@@ -215,7 +215,7 @@ HRESULT ISND_source::GetFormat(S_ISND_format *out)
 
 HRESULT ISND_source::Lock(void **data)
 {
-    if (FAILED(buffer->Lock(0, 0, &lockData, &lockSize, nullptr, nullptr, DSBLOCK_ENTIREBUFFER)))
+    if (FAILED(audio::g_pAudio->Lock(buffer, 0, 0, &lockData, &lockSize, nullptr, nullptr, DSBLOCK_ENTIREBUFFER)))
         return I3DERR_GENERIC;
     *data = lockData;
     return I3D_OK;
@@ -223,5 +223,5 @@ HRESULT ISND_source::Lock(void **data)
 
 HRESULT ISND_source::Unlock()
 {
-    return SUCCEEDED(buffer->Unlock(lockData, lockSize, nullptr, 0)) ? I3D_OK : I3DERR_GENERIC;
+    return SUCCEEDED(audio::g_pAudio->Unlock(buffer, lockData, lockSize, nullptr, 0)) ? I3D_OK : I3DERR_GENERIC;
 }

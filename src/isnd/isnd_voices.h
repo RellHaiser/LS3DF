@@ -15,7 +15,7 @@ namespace ls3d::snd {
 // A sound holding a voice (0x1C bytes).
 struct S_voice {
     ISND_sound *sound;                  // +0x00
-    IDirectSoundBuffer *buffer;         // +0x04 the sound's buffer
+    audio::Buffer *buffer;              // +0x04 the sound's buffer
     uint32_t priority;                  // +0x08
     uint32_t loop;                      // +0x0C ISNDP_LOOP bit of the Play flags
     uint32_t startTime;                 // +0x10 timeGetTime() at position 0
@@ -27,7 +27,7 @@ static_assert(sizeof(S_voice) == 0x1C, "S_voice layout");
 // A suspended sound (0x18 bytes).
 struct S_suspendedVoice {
     ISND_sound *sound;                  // +0x00
-    IDirectSoundBuffer *buffer;         // +0x04
+    audio::Buffer *buffer;              // +0x04
     uint32_t priority;                  // +0x08
     // +0x0C The play cursor in bytes when suspended. The resume code reads it as ms (kept).
     DWORD position;

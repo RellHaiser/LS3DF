@@ -85,11 +85,16 @@ def cflags(debug):
             "/I" + SRC, "/I" + os.path.join(ROOT, "include")]
 
 
-# The render device seam (docs/render_device.md): only the Direct3D 8 backend and the Direct3D
-# declarations may name Direct3D's interfaces or include them; the rest of the engine draws
-# through gfx::Device.
-SEAM_PATTERN = re.compile(r'#include "dx/d3d8\.h"|#include "gfx/d3d8/|\bIDirect3D\w*8\b|\bg_pD3D\b|\bg_pDevice\b')
-SEAM_ALLOWED = ("dx/", "gfx/d3d8/")
+# The device seams (docs/render_device.md, docs/sound_device.md): only a backend and the API
+# declarations may name the API's interfaces or include them; the rest of the engine draws through
+# gfx::Device and plays sound through audio::Device.
+SEAMS = [
+    ("the Direct3D 8 backend", ("dx/", "gfx/d3d8/"),
+     re.compile(r'#include "dx/d3d8\.h"|#include "gfx/d3d8/|\bIDirect3D\w*8\b|\bg_pD3D\b|\bg_pDevice\b')),
+    ("the DirectSound backend", ("dx/", "audio/dsound/"),
+     re.compile(r'#include <dsound\.h>|#include "audio/dsound/|\bIDirectSound\w*|\bIKsPropertySet\b|'
+                r'\bLPDIRECTSOUND\w*|\bDirectSound(Create8|Enumerate\w*)\b')),
+]
 
 
 def check_seams():
@@ -99,11 +104,15 @@ def check_seams():
         for f in files:
             path = os.path.join(d, f)
             rel = os.path.relpath(path, SRC).replace("\\", "/")
-            if not f.endswith((".cpp", ".h")) or rel.startswith(SEAM_ALLOWED):
+            if not f.endswith((".cpp", ".h")):
                 continue
-            for n, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
-                if SEAM_PATTERN.search(line):
-                    bad.append("%s(%d): uses the Direct3D 8 backend: %s" % (rel, n, line.strip()))
+            lines = list(enumerate(open(path, encoding="utf-8", errors="replace"), 1))
+            for name, allowed, pattern in SEAMS:
+                if rel.startswith(allowed):
+                    continue
+                for n, line in lines:
+                    if pattern.search(line.split("//", 1)[0]):   # (comments may name them)
+                        bad.append("%s(%d): uses %s: %s" % (rel, n, name, line.strip()))
     for line in bad:
         print(line)
     return not bad

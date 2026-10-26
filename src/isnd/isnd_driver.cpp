@@ -111,7 +111,7 @@ bool ISND_driver::OpenDevice(HWND hwnd, int frequency, int channels, int bits, u
 {
     flags = initFlags;
     dbgPrintf("Sound hardware enumeration:");
-    if (FAILED(DirectSoundEnumerateA(snd::LogDevice, nullptr)))
+    if (FAILED(audio::g_pAudio->Enumerate(snd::LogDevice, nullptr)))
         return false;
     dbgPrintf("\nTrying to use default sound device with mix freqency: %i Hz, %i channels, %i bps.", frequency,
               channels, bits);
@@ -119,25 +119,24 @@ bool ISND_driver::OpenDevice(HWND hwnd, int frequency, int channels, int bits, u
     bool created = false;
     if (!(flags & ISND_INIT_NO_EAX)) {
         CoInitialize(nullptr);
-        if (FAILED(CoCreateInstance(snd::kClsidEaxDirectSound8, nullptr, CLSCTX_INPROC_SERVER, IID_IDirectSound8,
-                                    reinterpret_cast<void **>(&dsound)))) {
+        if (FAILED(audio::g_pAudio->CreateInstance(snd::kClsidEaxDirectSound8, &dsound))) {
             dbgPrintf("EAX Unified was not found. Trying to use normal DirectSound initialization...");
-        } else if (SUCCEEDED(dsound->Initialize(nullptr))) {
+        } else if (SUCCEEDED(audio::g_pAudio->Initialize(dsound, nullptr))) {
             created = true;
         } else {
             // (The original overwrote the object without releasing it.)
-            dsound->Release();
+            audio::g_pAudio->Release(dsound);
             dsound = nullptr;
         }
     }
-    if (!created && FAILED(DirectSoundCreate8(nullptr, &dsound, nullptr))) {
+    if (!created && FAILED(audio::g_pAudio->Create(nullptr, &dsound))) {
         dbgPrintf("Sound initialization FAILED !");
         return false;
     }
 
     DSCAPS caps = {};
     caps.dwSize = sizeof caps;
-    dsound->GetCaps(&caps);
+    audio::g_pAudio->GetCaps(dsound, &caps);
     maxFrequency = caps.dwMaxSecondarySampleRate;
     minFrequency = caps.dwMinSecondarySampleRate;
     if (minFrequency == maxFrequency || minFrequency > 10000 || minFrequency == 0 || maxFrequency < 40000) {
@@ -158,16 +157,16 @@ bool ISND_driver::OpenDevice(HWND hwnd, int frequency, int channels, int bits, u
         InitEax();
     }
 
-    if (FAILED(dsound->SetCooperativeLevel(hwnd, DSSCL_PRIORITY)))
+    if (FAILED(audio::g_pAudio->SetCooperativeLevel(dsound, hwnd, DSSCL_PRIORITY)))
         return false;
     DSBUFFERDESC desc = {};
     desc.dwSize = sizeof desc;
     desc.dwFlags = DSBCAPS_PRIMARYBUFFER | DSBCAPS_CTRL3D;
-    if (FAILED(dsound->CreateSoundBuffer(&desc, &primary, nullptr)))
+    if (FAILED(audio::g_pAudio->CreateSoundBuffer(dsound, &desc, &primary)))
         return false;
     if (SetPrimaryFormat(frequency, channels, bits) != I3D_OK)
         return false;
-    if (FAILED(primary->QueryInterface(IID_IDirectSound3DListener, reinterpret_cast<void **>(&listener))))
+    if (FAILED(audio::g_pAudio->Query(primary, &listener)))
         return false;
 
     if (eax && !(flags & ISND_INIT_NO_EAX)) {
@@ -195,21 +194,22 @@ bool ISND_driver::OpenDevice(HWND hwnd, int frequency, int channels, int bits, u
         props.lfReference = 250.0f;
         props.roomRolloffFactor = 0.0f;
         props.flags = 0x3F;
-        eax->Set(snd::kEaxListenerProperties, snd::kEaxAllParameters, nullptr, 0, &props, sizeof props);
+        audio::g_pAudio->Set(eax, snd::kEaxListenerProperties, snd::kEaxAllParameters, nullptr, 0, &props,
+                             sizeof props);
     }
 
     const char *speakers;
     if (initFlags & ISND_INIT_HEADPHONES) {
-        dsound->SetSpeakerConfig(DSSPEAKER_HEADPHONE);
+        audio::g_pAudio->SetSpeakerConfig(dsound, DSSPEAKER_HEADPHONE);
         speakers = "Speaker configuration: STEREO HEADPHONES";
     } else if (initFlags & ISND_INIT_QUAD) {
-        dsound->SetSpeakerConfig(DSSPEAKER_QUAD);
+        audio::g_pAudio->SetSpeakerConfig(dsound, DSSPEAKER_QUAD);
         speakers = "Speaker configuration: QUADRAPHONIC SPEAKERS";
     } else if (initFlags & ISND_INIT_SURROUND_5_1) {
-        dsound->SetSpeakerConfig(DSSPEAKER_5POINT1);
+        audio::g_pAudio->SetSpeakerConfig(dsound, DSSPEAKER_5POINT1);
         speakers = "Speaker configuration: 5.1 SURROUND SOUND SPEAKERS";
     } else if (initFlags & ISND_INIT_STEREO) {
-        dsound->SetSpeakerConfig(DSSPEAKER_STEREO);
+        audio::g_pAudio->SetSpeakerConfig(dsound, DSSPEAKER_STEREO);
         speakers = "Speaker configuration: STEREO SPEAKERS";
     } else {
         speakers = "Speaker configuration: CURRENT WINDOWS SPEAKER CONFIGURATION";
@@ -238,35 +238,36 @@ bool ISND_driver::InitEax()
             desc.dwFlags = DSBCAPS_CTRL3D | DSBCAPS_STATIC | DSBCAPS_LOCHARDWARE;
             desc.dwBufferBytes = 0x40;
             desc.lpwfxFormat = &format;
-            IDirectSoundBuffer *buffer = nullptr;
-            if (dsound->CreateSoundBuffer(&desc, &buffer, nullptr) != DS_OK)
+            audio::Buffer *buffer = nullptr;
+            if (audio::g_pAudio->CreateSoundBuffer(dsound, &desc, &buffer) != DS_OK)
                 return false;
-            IDirectSoundBuffer8 *buffer8 = nullptr;
-            if (FAILED(buffer->QueryInterface(IID_IDirectSoundBuffer8, reinterpret_cast<void **>(&buffer8)))) {
-                buffer->Release();
+            audio::Buffer *buffer8 = nullptr;
+            if (FAILED(audio::g_pAudio->Query(buffer, &buffer8))) {
+                audio::g_pAudio->Release(buffer);
                 return false;
             }
-            if (FAILED(buffer8->QueryInterface(IID_IDirectSound3DBuffer, reinterpret_cast<void **>(&eaxBuffer)))) {
-                buffer->Release();
-                buffer8->Release();
+            if (FAILED(audio::g_pAudio->Query(buffer8, &eaxBuffer))) {
+                audio::g_pAudio->Release(buffer);
+                audio::g_pAudio->Release(buffer8);
                 return false;
             }
             // (The original releases these two after the block below, also when eaxBuffer
             // already existed and they were never set.)
-            buffer->Release();
-            buffer8->Release();
+            audio::g_pAudio->Release(buffer);
+            audio::g_pAudio->Release(buffer8);
         }
-        if (FAILED(eaxBuffer->QueryInterface(IID_IKsPropertySet, reinterpret_cast<void **>(&eax)))) {
-            eaxBuffer->Release();
+        if (FAILED(audio::g_pAudio->Query(eaxBuffer, &eax))) {
+            audio::g_pAudio->Release(eaxBuffer);
             eaxBuffer = nullptr;
             return false;
         }
     }
     if (!(flags & ISND_INIT_NO_EAX)) {
         ULONG support = 0;
-        if (SUCCEEDED(eax->QuerySupport(snd::kEaxListenerProperties, snd::kEaxAllParameters, &support)) &&
+        audio::Device *dev = audio::g_pAudio;
+        if (SUCCEEDED(dev->QuerySupport(eax, snd::kEaxListenerProperties, snd::kEaxAllParameters, &support)) &&
             (support & KSPROPERTY_SUPPORT_GET) && (support & KSPROPERTY_SUPPORT_SET) &&
-            SUCCEEDED(eax->QuerySupport(snd::kEaxBufferProperties, snd::kEaxAllParameters, &support)) &&
+            SUCCEEDED(dev->QuerySupport(eax, snd::kEaxBufferProperties, snd::kEaxAllParameters, &support)) &&
             (support & KSPROPERTY_SUPPORT_GET) && (support & KSPROPERTY_SUPPORT_SET)) {
             dbgPrintf("Using EAX 3.0 through EAX Unified.");
             return true;
@@ -293,22 +294,22 @@ HRESULT ISND_driver::Close()
             externalModule = nullptr;
         }
         if (listener) {
-            listener->Release();
+            audio::g_pAudio->Release(listener);
             listener = nullptr;
         }
         if (eax) {
-            eax->Release();
+            audio::g_pAudio->Release(eax);
             eax = nullptr;
         }
         if (eaxBuffer) {
-            eaxBuffer->Release();
+            audio::g_pAudio->Release(eaxBuffer);
             eaxBuffer = nullptr;
         }
         if (primary) {
-            primary->Release();
+            audio::g_pAudio->Release(primary);
             primary = nullptr;
         }
-        dsound->Release();
+        audio::g_pAudio->Release(dsound);
         dsound = nullptr;
     }
     snd::g_initialized = false;
@@ -329,7 +330,7 @@ HRESULT ISND_driver::SetPrimaryFormat(int frequency, int channels, int bits)
     format.wBitsPerSample = static_cast<WORD>(bits);
     format.nBlockAlign = static_cast<WORD>((static_cast<WORD>(bits) >> 3) * channels);
     format.nAvgBytesPerSec = format.nBlockAlign * static_cast<DWORD>(frequency);
-    return SUCCEEDED(primary->SetFormat(&format)) ? I3D_OK : I3DERR_INVALIDPARAMS;
+    return SUCCEEDED(audio::g_pAudio->SetFormat(primary, &format)) ? I3D_OK : I3DERR_INVALIDPARAMS;
 }
 
 HRESULT ISND_driver::SetVolume(float value)
@@ -403,6 +404,6 @@ ISND_3Dlistener *ISND_driver::NewListener()
     if (!result)
         return nullptr;
     if (listener)
-        listener->GetAllParameters(&result->params);
+        audio::g_pAudio->GetAllParameters(listener, &result->params);
     return result;
 }
