@@ -23,11 +23,12 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 
 ## Status
 
-> **Not tested in the game yet.** The whole DLL compiles and links, and much of it is verified
-> against the original DLL by the differential tests below — but nothing that needs a real
-> window, Direct3D device or sound card has run yet: device creation and mode changes, the
-> renderer, video on screen, DirectInput, DirectSound start-up, device loss and reset. Try it
-> only in a copy of the game folder and keep the original DLL.
+> **Tried briefly in the game.** In a first session (October 2026) the built DLL ran Hidden &
+> Dangerous 2 without obvious problems: the menus, two cooperative multiplayer missions, the
+> music, and the intro and credits movies. Much of the DLL is also verified against the original
+> by the differential tests below. A first session is not a play-through: the single-player
+> campaign, Sabre Squadron and the less common paths (mode changes, device loss and reset) are not
+> known to work yet. Use it in a copy of the game folder and keep the original DLL.
 
 | Part | Verified against the original by |
 |---|---|
@@ -47,7 +48,7 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 | The lightmap baker | `compare_lightmap`: 20,000 rounds of bakes and light probes |
 | Model, scene, animation and shadow loading | `compare_loader`: all 6,200 of the game's files plus 14 synthetic ones, member by member |
 | IShow: Ogg music streaming, Bink movies, AVI and other files through DirectShow, into textures | `compare_show`: 80,000 operations on the game's music and movies, 24 AVI playbacks |
-| The renderer, IGraph's device and window creation, ISND start-up, IShow's full-screen playback and drawing | compiles and links only |
+| The renderer, IGraph's device and window creation, ISND start-up, IShow's full-screen playback and drawing | not compared with the original; they ran in the first game session (above) |
 
 The tests are described [below](#tests); each one's header says what it compares and what it
 leaves out.
