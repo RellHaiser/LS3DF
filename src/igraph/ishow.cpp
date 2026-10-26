@@ -2,20 +2,19 @@
 #include "igraph/ishow.h"
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
-
-#include <dshow.h>
 
 #include "core/debug.h"
 #include "core/fpu.h"
 #include "core/i3d_result.h"
-#include "external/bink.h"
 #include "external/rw_data.h"
 #include "external/vorbisfile.h"
 #include "igraph/igraph_state.h"
 #include "igraph/itexture.h"
-#include "igraph/texture_renderer.h"
 #include "isnd/isnd.h"
+#include "platform/platform.h"
+#include "video/video.h"
 
 using namespace ls3d;
 using namespace ls3d::ig;
@@ -24,16 +23,6 @@ namespace {
 
 // The players of the external stream API (0x100d25e0), for its end callback.
 C_vector<IShow *> g_externalShows(0x20);
-
-// CreateTextureRenderer's scratch state, global in the original.
-char g_filterName[0x100];                   // 0x100d2468
-IBaseFilter *g_splitter;                    // 0x100d25b8 the "AVI Splitter" of the graph
-IEnumPins *g_enumPins;                      // 0x100d25c0
-IPin *g_pins[20];                           // 0x100d2568
-ULONG g_pinCount;                           // 0x100d23e8
-IEnumMediaTypes *g_enumTypes;               // 0x100d25bc
-AM_MEDIA_TYPE *g_mediaTypes[20];            // 0x100d23f0
-ULONG g_mediaTypeCount;                     // 0x100d2460
 
 const DWORD kStreamBufferSize = 0x84000;    // 11 notification blocks of 0xC000 bytes
 const DWORD kNotifyBlock = 0xc000;
@@ -62,8 +51,8 @@ long __cdecl OggTell(void *source)
 }
 
 // Decodes into `dst` (`left` bytes) in 4 KB reads. At the end of the stream (or an error) the rest
-// is silence and ISHOWF_END is set; with `loop` an ISHOW_LOOP stream starts again instead.
-void Decode(IShow *show, char *dst, int left, bool loop)
+// is silence and the result false; with `loop` an ISHOW_LOOP stream starts again instead.
+bool Decode(IShow *show, char *dst, int left, bool loop)
 {
     char *const start = dst;
     int bitstream;
@@ -80,9 +69,9 @@ void Decode(IShow *show, char *dst, int left, bool loop)
         if (loop && (show->flags & ISHOW_LOOP) && ov_time_seek(show->vorbis, 0.0) == 0)
             continue;
         std::memset(dst, 0, left);
-        show->flags |= ISHOWF_END;
-        return;
+        return false;
     }
+    return true;
 }
 
 // The texture stage and render states of the video quads (Draw, PlayModal), through IGraph's
@@ -123,14 +112,7 @@ void __cdecl ExternalCallback(int stream, int event)
     }
 }
 
-template <class T> void SafeRelease(T *&p)
-{
-    if (p) {
-        p->Release();
-        p = nullptr;
-    }
-}
-// The same for the sound device's handles.
+// The sound device's handles released.
 template <class T> void SafeReleaseAudio(T *&p)
 {
     if (p) {
@@ -139,12 +121,63 @@ template <class T> void SafeReleaseAudio(T *&p)
     }
 }
 
+// An .avi's frames into the player's tiles (the texture renderer of the original, which IShow's
+// graph creates).
+class ShowSink final : public video::FrameSink {
+public:
+    explicit ShowSink(IShow *show) : show(show) {}
+
+    // 0x10072f30 (CTextureRenderer::CheckMediaType): RGB32 with ISHOW_TRUECOLOR and a true-colour
+    // texture format, else the 16-bit format's layout.
+    int FrameFormat() override
+    {
+        if ((show->flags & ISHOW_TRUECOLOR) && g_fmtTrueColor)
+            return 32;
+        return g_fmt16Bit == D3DFMT_R5G6B5 ? 565 : 555;
+    }
+    // 0x10072fe0 (CTextureRenderer::SetMediaType)
+    D3DFORMAT SetSize(int width, int height) override { return CreateShowTiles(width, height, show); }
+    // 0x10073070 (CTextureRenderer::DoRenderSample): the bottom-up frame cut into the tiles.
+    void Frame(const uint8_t *bits, int pitch, int height, D3DFORMAT format) override
+    {
+        for (int i = show->tiles.Size(); i--;) {
+            S_showTile &tile = show->tiles[i];
+            int texturePitch;
+            BYTE *dst = static_cast<BYTE *>(tile.texture->Lock(nullptr, &texturePitch, 0));
+            int bytes = 0;
+            switch (format) {
+            case D3DFMT_A8R8G8B8:
+            case D3DFMT_X8R8G8B8: bytes = 4; break;
+            case D3DFMT_R5G6B5:
+            case D3DFMT_X1R5G5B5:
+            case D3DFMT_A1R5G5B5: bytes = 2; break;
+            default:
+                dbgPrintf("IShow::DoRenderSample() - ERROR! Unsuppoted destination texture format: %s !",
+                          g_pIGraph->GetFormatName(format));
+            }
+            if (bytes) {
+                const BYTE *src = bits + (height - tile.y - 1) * pitch + tile.x * bytes;
+                for (int y = tile.height; y; --y) {
+                    std::memcpy(dst, src, static_cast<size_t>(tile.width) * bytes);
+                    dst += texturePitch;
+                    src -= pitch;
+                }
+            }
+            tile.texture->Unlock();
+        }
+        ++show->frameCount;
+    }
+
+private:
+    IShow *show;
+};
+
 }  // namespace
 
 // 0x10070d30
 IShow::IShow()
-    : graph(nullptr), control(nullptr), seeking(nullptr), unknown10(nullptr), audio(nullptr), events(nullptr),
-      bink(nullptr), open(false), refCount(1), flags(0), rect{0, 0, 0, 0}, volume(1.0f), tiles(1), renderer(nullptr),
+    : graph(nullptr), unused08(nullptr), unused0C(nullptr), unknown10(nullptr), unused14(nullptr), unused18(nullptr),
+      movie(nullptr), open(false), refCount(1), flags(0), rect{0, 0, 0, 0}, volume(1.0f), tiles(1), unused50(nullptr),
       frameCount(0), extStream(-1), extOpen(false), extPaused(false), extFinished(false), threadId(0),
       thread(nullptr), event(nullptr), notify(nullptr), buffer(nullptr), notifyCount(0), writePos(0), bufferSize(0),
       filling(false), vorbis(nullptr), file(-1)
@@ -163,11 +196,10 @@ IShow::~IShow()
     g_shows.RemoveSwap(this);
     Close();
     CloseExternal();
-    SafeRelease(seeking);
-    SafeRelease(control);
-    SafeRelease(events);
-    SafeRelease(audio);
-    SafeRelease(graph);
+    if (graph) {
+        video::g_pVideo->ReleaseGraph(graph);
+        graph = nullptr;
+    }
     tiles.Free();
 }
 
@@ -203,13 +235,14 @@ bool __stdcall IShow::IsOpen()
 void IShow::FillBuffer(bool whole)
 {
     while (filling && !whole)
-        Sleep(0);
+        platform::Pause(0);
     filling = true;
     void *data;
     DWORD size;
     if (whole) {
         if (audio::g_pAudio->Lock(buffer, 0, 0, &data, &size, nullptr, nullptr, DSBLOCK_ENTIREBUFFER) >= 0) {
-            Decode(this, static_cast<char *>(data), static_cast<int>(size), false);
+            if (!Decode(this, static_cast<char *>(data), static_cast<int>(size), false))
+                flags |= ISHOWF_END;
             audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0);
             writePos = 0;
         }
@@ -230,8 +263,8 @@ void IShow::FillBuffer(bool whole)
         writePos = 0;
         if (flags & ISHOWF_END)
             std::memset(data, 0, size);
-        else
-            Decode(this, static_cast<char *>(data), static_cast<int>(size), true);
+        else if (!Decode(this, static_cast<char *>(data), static_cast<int>(size), true))
+            flags |= ISHOWF_END;
         audio::g_pAudio->Unlock(buffer, data, size, nullptr, 0);
     }
     if (static_cast<int>(play) > writePos) {
@@ -240,6 +273,8 @@ void IShow::FillBuffer(bool whole)
             return;
         }
         writePos = static_cast<int>(play);
+        // Quirk: an end of the stream here is not marked (silence follows, and the next refill
+        // decodes again); only a refill that wraps past the buffer's end marks it.
         if (flags & ISHOWF_END)
             std::memset(data, 0, size);
         else
@@ -255,9 +290,8 @@ DWORD WINAPI IShow::StreamThread(void *param)
 {
     IShow *show = static_cast<IShow *>(param);
     for (;;) {
-        Sleep(0);
-        // 0xBF: QS_ALLINPUT of the original's SDK (no QS_SENDMESSAGE / QS_RAWINPUT).
-        if (MsgWaitForMultipleObjects(1, &show->event, FALSE, INFINITE, 0xbf) != WAIT_OBJECT_0)
+        platform::Pause(0);
+        if (!platform::WaitEvent(show->event))
             continue;
         if (!(show->flags & ISHOWF_PLAYING))
             continue;
@@ -273,10 +307,10 @@ DWORD WINAPI IShow::StreamThread(void *param)
     }
 }
 
-// 0x10071330: decodes Bink's current frame into the tiles.
+// 0x10071330: copies the movie's current frame into the tiles.
 void IShow::CopyFrameToTiles(bool all)
 {
-    const uint32_t copyAll = all ? BINKCOPYALL : 0;
+    const uint32_t copyAll = all ? video::MOVIE_COPY_ALL : 0;
     for (int i = tiles.Size(); i--;) {
         S_showTile &tile = tiles[i];
         int pitch;
@@ -284,16 +318,16 @@ void IShow::CopyFrameToTiles(bool all)
         uint32_t surface = 0;
         switch (tile.texture->format) {
         case D3DFMT_A8R8G8B8:
-        case D3DFMT_X8R8G8B8: surface = BINKSURFACE32; break;
-        case D3DFMT_R5G6B5: surface = BINKSURFACE565; break;
+        case D3DFMT_X8R8G8B8: surface = video::MOVIE_RGB32; break;
+        case D3DFMT_R5G6B5: surface = video::MOVIE_RGB565; break;
         case D3DFMT_X1R5G5B5:
-        case D3DFMT_A1R5G5B5: surface = BINKSURFACE555; break;
+        case D3DFMT_A1R5G5B5: surface = video::MOVIE_RGB555; break;
         default:
             dbgPrintf("CopyFrameToAllTextures() - ERROR! Unsupported destination texture format: %s !",
                       g_pIGraph->GetFormatName(tile.texture->format));
         }
-        BinkCopyToBufferRect(bink, bits, pitch, tile.height, 0, 0, tile.x, tile.y, tile.width, tile.height,
-                             copyAll | surface);
+        video::g_pVideo->CopyFrame(movie, bits, pitch, tile.height, tile.x, tile.y, tile.width, tile.height,
+                                   copyAll | surface);
         tile.texture->Unlock();
     }
 }
@@ -378,12 +412,12 @@ HRESULT __stdcall IShow::Open(const char *fileName, uint32_t openFlags)
             return I3DERR_GENERIC;
         if (audio::g_pAudio->Query(buffer, &notify) < 0)
             return I3DERR_GENERIC;
-        event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+        event = platform::NewEvent();
         DSBPOSITIONNOTIFY positions[kNotifyCount];
         int n = 0;
         for (DWORD offset = kNotifyBlock - 1; offset < kStreamBufferSize + kNotifyBlock - 1; offset += kNotifyBlock) {
             positions[n].dwOffset = offset;
-            positions[n].hEventNotify = event;
+            positions[n].hEventNotify = platform::NativeEvent(event);
             ++n;
         }
         if (audio::g_pAudio->SetNotificationPositions(notify, kNotifyCount, positions) < 0)
@@ -394,36 +428,33 @@ HRESULT __stdcall IShow::Open(const char *fileName, uint32_t openFlags)
         audio::g_pAudio->SetCurrentPosition(buffer, 0);
         notifyCount = 0;
         writePos = 0;
-        thread = CreateThread(nullptr, 0, StreamThread, this, 0, &threadId);
+        thread = platform::StartThread(StreamThread, this);
         flags |= ISHOWF_OGG;
     } else if (std::strstr(fileName, ".bik") || std::strstr(fileName, ".BIK")) {
         if (g_sndDriver->IsInitialized())
-            BinkSetSoundSystem(BinkOpenDirectSound,
-                               reinterpret_cast<uint32_t>(audio::g_pAudio->Native(g_sndDriver->dsound)));
-        bink = BinkOpen(fileName, 0);
-        if (!bink) {
+            video::g_pVideo->UseSound(g_sndDriver->dsound);
+        movie = video::g_pVideo->OpenMovie(fileName);
+        if (!movie) {
             dbgPrintf("ERROR! IShow::Open() - %s", fileName);
             return I3DERR_NOFILE;
         }
-        CreateShowTiles(static_cast<int>(bink->width), static_cast<int>(bink->height), this);
+        const video::S_movieInfo info = video::g_pVideo->Info(movie);
+        CreateShowTiles(static_cast<int>(info.width), static_cast<int>(info.height), this);
     } else {
         if (!graph) {
-            CoCreateInstance(CLSID_FilterGraph, nullptr, CLSCTX_INPROC_SERVER, IID_IGraphBuilder,
-                             reinterpret_cast<void **>(&graph));
+            graph = video::g_pVideo->CreateGraph();
             if (!graph)
                 return I3DERR_GENERIC;
-            graph->QueryInterface(IID_IMediaSeeking, reinterpret_cast<void **>(&seeking));
-            graph->QueryInterface(IID_IMediaControl, reinterpret_cast<void **>(&control));
-            graph->QueryInterface(IID_IMediaEvent, reinterpret_cast<void **>(&events));
-            graph->QueryInterface(IID_IBasicAudio, reinterpret_cast<void **>(&audio));
         }
-        wchar_t wideName[250];
-        MultiByteToWideChar(CP_ACP, 0, fileName, -1, wideName, 250);
         HRESULT hr;
-        if (std::strstr(fileName, ".avi") || std::strstr(fileName, ".AVI"))
-            hr = CreateTextureRenderer(wideName);
-        else
-            hr = graph->RenderFile(wideName, nullptr);
+        if (std::strstr(fileName, ".avi") || std::strstr(fileName, ".AVI")) {
+            // (0x100729f0, m_CreateCTextureRenderer: the frames into the tiles, then their layout)
+            hr = video::g_pVideo->RenderToSink(graph, fileName, new ShowSink(this));
+            if (hr >= 0)
+                LayoutTiles();
+        } else {
+            hr = video::g_pVideo->RenderFile(graph, fileName);
+        }
         if (hr < 0) {
             dbgPrintf("ERROR! IShow::Open() - %s", fileName);
             return I3DERR_NOFILE;
@@ -442,16 +473,16 @@ HRESULT __stdcall IShow::Close()
     for (int i = tiles.Size(); i--;)
         tiles[i].texture->Release();
     tiles.Free();
-    if (bink) {
-        BinkClose(bink);
-        bink = nullptr;
+    if (movie) {
+        video::g_pVideo->CloseMovie(movie);
+        movie = nullptr;
     }
     if (event) {
-        TerminateThread(thread, 0);
-        CloseHandle(thread);            // (the original never closed the thread handle)
+        platform::Terminate(thread, 0);
+        platform::Release(thread);      // (the original never closed the thread handle)
         thread = nullptr;
         threadId = 0;
-        CloseHandle(event);
+        platform::DeleteEvent(event);
         event = nullptr;
     }
     if (file >= 0) {
@@ -476,9 +507,9 @@ HRESULT __stdcall IShow::Play()
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (bink) {
+    if (movie) {
         if (flags & ISHOWF_PAUSED) {
-            BinkPause(bink, 0);
+            video::g_pVideo->Pause(movie, false);
             flags &= ~ISHOWF_PAUSED;
         }
         flags |= ISHOWF_PLAYING;
@@ -501,8 +532,7 @@ HRESULT __stdcall IShow::Play()
         }
         return 0;
     }
-    if (control)
-        control->Run();
+    video::g_pVideo->Run(graph);
     return 0;
 }
 
@@ -511,7 +541,7 @@ HRESULT __stdcall IShow::Stop()
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (bink) {
+    if (movie) {
         flags &= ~(ISHOWF_PLAYING | ISHOWF_PAUSED);
         SetPosition(0);
         return 0;
@@ -524,7 +554,7 @@ HRESULT __stdcall IShow::Stop()
         writePos = 0;
         return 0;
     }
-    control->Stop();
+    video::g_pVideo->Stop(graph);
     SetPosition(0);
     frameCount = 0;
     return 0;
@@ -535,9 +565,9 @@ HRESULT __stdcall IShow::Pause()
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (bink) {
+    if (movie) {
         if (flags & ISHOWF_PLAYING) {
-            BinkPause(bink, 1);
+            video::g_pVideo->Pause(movie, true);
             flags = (flags & ~ISHOWF_PLAYING) | ISHOWF_PAUSED;
         }
     } else if (flags & ISHOWF_OGG) {
@@ -547,7 +577,7 @@ HRESULT __stdcall IShow::Pause()
             flags |= ISHOWF_PAUSED;
         }
     } else {
-        control->Pause();
+        video::g_pVideo->Pause(graph);
     }
     return 0;
 }
@@ -556,12 +586,14 @@ HRESULT __stdcall IShow::Pause()
 void IShow::LayoutTiles()
 {
     float scaleX, scaleY;
-    if (bink) {
-        scaleX = static_cast<float>(rect.width) / static_cast<float>(static_cast<int>(bink->width));
-        scaleY = static_cast<float>(rect.height) / static_cast<float>(static_cast<int>(bink->height));
-    } else if (renderer) {
-        scaleX = static_cast<float>(rect.width) / static_cast<float>(renderer->videoWidth);
-        scaleY = static_cast<float>(rect.height) / static_cast<float>(renderer->videoHeight);
+    int videoWidth, videoHeight;
+    if (movie) {
+        const video::S_movieInfo info = video::g_pVideo->Info(movie);
+        scaleX = static_cast<float>(rect.width) / static_cast<float>(static_cast<int>(info.width));
+        scaleY = static_cast<float>(rect.height) / static_cast<float>(static_cast<int>(info.height));
+    } else if (video::g_pVideo->VideoSize(graph, &videoWidth, &videoHeight)) {
+        scaleX = static_cast<float>(rect.width) / static_cast<float>(videoWidth);
+        scaleY = static_cast<float>(rect.height) / static_cast<float>(videoHeight);
     } else {
         return;
     }
@@ -626,15 +658,14 @@ HRESULT __stdcall IShow::GetVideoSize(S_showRect *size)
     if (!open)
         return I3DERR_NOTINITIALIZED;
     *size = {0, 0, 0, 0};
-    if (bink) {
-        size->width = static_cast<int>(bink->width);
-        size->height = static_cast<int>(bink->height);
+    if (movie) {
+        const video::S_movieInfo info = video::g_pVideo->Info(movie);
+        size->width = static_cast<int>(info.width);
+        size->height = static_cast<int>(info.height);
         return 0;
     }
-    if (!renderer)
+    if (!video::g_pVideo->VideoSize(graph, &size->width, &size->height))
         return I3DERR_NOTINITIALIZED;
-    size->width = renderer->videoWidth;
-    size->height = renderer->videoHeight;
     return 0;
 }
 
@@ -643,21 +674,19 @@ int __stdcall IShow::GetState()
 {
     if (!open)
         return -1;
-    if (bink || (flags & ISHOWF_OGG)) {
+    if (movie || (flags & ISHOWF_OGG)) {
         if (flags & ISHOWF_PLAYING)
             return ISHOW_STATE_PLAYING;
         return (flags & ISHOWF_PAUSED) ? ISHOW_STATE_PAUSED : ISHOW_STATE_STOPPED;
     }
     long code;
-    LONG_PTR param1, param2;
-    while (events->GetEvent(&code, &param1, &param2, 0) >= 0) {
-        events->FreeEventParams(code, param1, param2);
+    while (video::g_pVideo->NextEvent(graph, &code)) {
         if (code > 0) {
-            if (code <= EC_USERABORT) {     // EC_COMPLETE, EC_USERABORT
+            if (code <= video::GRAPH_EVENT_USERABORT) {     // complete, user abort
                 Stop();
                 return ISHOW_STATE_STOPPED;
             }
-            if (code == EC_PAUSED)
+            if (code == video::GRAPH_EVENT_PAUSED)
                 return ISHOW_STATE_PAUSED;
         }
     }
@@ -669,12 +698,13 @@ HRESULT __stdcall IShow::SetPosition(int ms)
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (bink) {
+    if (movie) {
         // Quirk: frame = rateDiv * ms / (rate * 0.001), not the inverse of GetPosition's
         // ms = rateDiv * frame * 1000 / rate (exact for 0 only).
-        const double num = static_cast<double>(static_cast<uint32_t>(bink->rateDiv * static_cast<uint32_t>(ms)));
-        const float den = static_cast<float>(static_cast<double>(bink->rate) * 0.001f);
-        BinkGoto(bink, static_cast<uint32_t>(Ftol(static_cast<float>(num / den))), 0);
+        const video::S_movieInfo info = video::g_pVideo->Info(movie);
+        const double num = static_cast<double>(static_cast<uint32_t>(info.rateDivisor * static_cast<uint32_t>(ms)));
+        const float den = static_cast<float>(static_cast<double>(info.rate) * 0.001f);
+        video::g_pVideo->Goto(movie, static_cast<uint32_t>(Ftol(static_cast<float>(num / den))));
         return 0;
     }
     if (flags & ISHOWF_OGG) {
@@ -696,8 +726,7 @@ HRESULT __stdcall IShow::SetPosition(int ms)
         return 0;
     }
     // (100 ns units, multiplied in 32 bits as in the original)
-    LONGLONG position = static_cast<uint32_t>(ms * 10000);
-    seeking->SetPositions(&position, AM_SEEKING_AbsolutePositioning, nullptr, AM_SEEKING_NoPositioning);
+    video::g_pVideo->SetPosition(graph, static_cast<uint32_t>(ms * 10000));
     return 0;
 }
 
@@ -706,10 +735,11 @@ HRESULT __stdcall IShow::SetFrame(uint32_t frame)
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (bink) {
-        if (frame > bink->frames)
-            frame = bink->frames;
-        BinkGoto(bink, frame, 0);
+    if (movie) {
+        const uint32_t frames = video::g_pVideo->Info(movie).frames;
+        if (frame > frames)
+            frame = frames;
+        video::g_pVideo->Goto(movie, frame);
     }
     return 0;
 }
@@ -719,8 +749,9 @@ HRESULT __stdcall IShow::GetPosition(int *ms)
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (bink) {
-        *ms = static_cast<int>(bink->rateDiv * bink->frameNum * 1000u / bink->rate);
+    if (movie) {
+        const video::S_movieInfo info = video::g_pVideo->Info(movie);
+        *ms = static_cast<int>(info.rateDivisor * info.frame * 1000u / info.rate);
         return 0;
     }
     if (flags & ISHOWF_OGG) {
@@ -730,9 +761,7 @@ HRESULT __stdcall IShow::GetPosition(int *ms)
         *ms = Ftol(static_cast<float>(ov_time_tell(vorbis) * 1000.0));
         return 0;
     }
-    LONGLONG position = 0;
-    seeking->GetCurrentPosition(&position);
-    *ms = static_cast<int>(position / 10000);
+    *ms = static_cast<int>(video::g_pVideo->GetPosition(graph) / 10000);
     return 0;
 }
 
@@ -744,8 +773,8 @@ HRESULT __stdcall IShow::SetVolume(float v)
     if (!g_sndDriver->IsInitialized())
         v = 0.0f;
     volume = v;
-    if (bink) {
-        BinkSetVolume(bink, 0, Ftol(v * 32768.0f));
+    if (movie) {
+        video::g_pVideo->SetVolume(movie, Ftol(v * 32768.0f));
         return 0;
     }
     // Hundredths of a decibel: 866 ln(v), at least -10000.
@@ -762,7 +791,7 @@ HRESULT __stdcall IShow::SetVolume(float v)
     if (flags & ISHOWF_OGG)
         audio::g_pAudio->SetVolume(buffer, db);
     else
-        audio->put_Volume(db);
+        video::g_pVideo->SetVolume(graph, db);
     return 0;
 }
 
@@ -781,7 +810,7 @@ int __stdcall IShow::GetTileCount()
 // 0x100725b0
 S_showTile *__stdcall IShow::GetTiles()
 {
-    Sleep(0);
+    platform::Pause(0);
     return tiles.Data();
 }
 
@@ -790,16 +819,17 @@ HRESULT __stdcall IShow::UpdateVideo(bool force)
 {
     if (!open)
         return I3DERR_NOTINITIALIZED;
-    if (((flags & ISHOWF_PLAYING) || force) && bink) {
-        if (!BinkWait(bink) || force) {
-            BinkDoFrame(bink);
+    if (((flags & ISHOWF_PLAYING) || force) && movie) {
+        if (!video::g_pVideo->Wait(movie) || force) {
+            video::g_pVideo->DecodeFrame(movie);
             CopyFrameToTiles(force);
             if (!force) {
-                if (bink->frameNum == bink->frames) {
+                const video::S_movieInfo info = video::g_pVideo->Info(movie);
+                if (info.frame == info.frames) {
                     Stop();
                     return 0;
                 }
-                BinkNextFrame(bink);
+                video::g_pVideo->NextFrame(movie);
             }
         }
     }
@@ -848,19 +878,19 @@ HRESULT __stdcall IShow::PlayModal()
             Stop();
             return 0;
         }
-        // Bink draws every pass (Draw decodes when a frame is due); DirectShow when the
-        // renderer delivered a new frame.
-        if (bink || drawn != frameCount) {
+        // A movie draws every pass (Draw decodes when a frame is due); a graph when the renderer
+        // delivered a new frame.
+        if (movie || drawn != frameCount) {
             const int frame = frameCount;
             g_pIGraph->Clear(0, 1.0f, 3);
             g_pIGraph->BeginScene();
             Draw(false);
             g_pIGraph->EndScene();
             g_pIGraph->Flip();
-            if (!bink)
+            if (!movie)
                 drawn = frame;
         } else {
-            Sleep(0);
+            platform::Pause(0);
         }
         if (GetState() == ISHOW_STATE_STOPPED)
             return 0;
@@ -956,122 +986,4 @@ HRESULT __stdcall IShow::SetExternal74(int value)
 HRESULT __stdcall IShow::SetExternal78(int value)
 {
     return g_sndDriver->externalApi->Set1C(extStream, 0, value) >= 0 ? 0 : I3DERR_GENERIC;
-}
-
-// 0x100729f0 (m_CreateCTextureRenderer): file source -> texture renderer, plus the AVI
-// splitter's audio stream into a DirectSound renderer.
-HRESULT IShow::CreateTextureRenderer(const wchar_t *fileName)
-{
-    HRESULT hr = -1;
-    CTextureRenderer *r = new CTextureRenderer(&hr);
-    renderer = r;
-    if (hr < 0) {
-        dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not create texture renderer object!  hr=0x%x", hr);
-        return E_FAIL;
-    }
-    r->show = this;
-    IBaseFilter *filter = r;
-    hr = graph->AddFilter(filter, L"TEXTURERENDERER");
-    if (hr < 0) {
-        dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not add renderer filter to graph!  hr=0x%x", hr);
-        return hr;
-    }
-    // (the original kept the references below on its failure paths)
-    IBaseFilter *source = nullptr;
-    hr = graph->AddSourceFilter(fileName, L"SOURCE", &source);
-    if (hr < 0) {
-        dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not create source filter to graph!  hr=0x%x", hr);
-        return hr;
-    }
-    IPin *rendererIn = nullptr;
-    hr = filter->FindPin(L"In", &rendererIn);
-    if (hr < 0) {
-        dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not find input pin!  hr=0x%x", hr);
-        source->Release();
-        return hr;
-    }
-    IPin *sourceOut = nullptr;
-    hr = source->FindPin(L"Output", &sourceOut);
-    if (hr < 0) {
-        dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not find output pin!  hr=0x%x", hr);
-        rendererIn->Release();
-        source->Release();
-        return hr;
-    }
-    hr = graph->Connect(sourceOut, rendererIn);
-    rendererIn->Release();
-    sourceOut->Release();
-    source->Release();
-    if (hr < 0) {
-        dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not connect pins!  hr=0x%x", hr);
-        return hr;
-    }
-
-    IEnumFilters *filters = nullptr;
-    graph->EnumFilters(&filters);
-    IBaseFilter *f;
-    ULONG fetched;
-    while (filters->Next(1, &f, &fetched) == S_OK) {
-        FILTER_INFO info;
-        f->QueryFilterInfo(&info);
-        WideCharToMultiByte(CP_ACP, 0, info.achName, -1, g_filterName, sizeof(g_filterName), nullptr, nullptr);
-        if (!std::memcmp(g_filterName, "AVI Splitter", 13)) {
-            g_splitter = f;
-            f->AddRef();
-        }
-        info.pGraph->Release();
-        f->Release();
-    }
-    filters->Release();
-    if (g_splitter) {
-        g_splitter->EnumPins(&g_enumPins);
-        g_enumPins->Next(20, g_pins, &g_pinCount);
-        IPin *audioPin = nullptr;
-        for (ULONG i = 0; i < g_pinCount; ++i) {
-            g_pins[i]->EnumMediaTypes(&g_enumTypes);
-            g_enumTypes->Next(20, g_mediaTypes, &g_mediaTypeCount);
-            for (ULONG j = 0; j < g_mediaTypeCount; ++j) {
-                if (!audioPin && g_mediaTypes[j]->majortype == MEDIATYPE_Audio) {
-                    audioPin = g_pins[i];
-                    audioPin->AddRef();
-                }
-                ls3d::dshow::DeleteMediaType(g_mediaTypes[j]);
-            }
-            g_enumTypes->Release();
-            g_pins[i]->Release();
-        }
-        g_enumPins->Release();
-        if (audioPin) {
-            CoCreateInstance(CLSID_DSoundRender, nullptr, CLSCTX_INPROC_SERVER, IID_IBaseFilter,
-                             reinterpret_cast<void **>(&r->soundRenderer));
-            if (r->soundRenderer) {
-                graph->AddFilter(r->soundRenderer, L"SOUNDRENDERER");
-                IPin *audioIn = nullptr;
-                hr = r->soundRenderer->FindPin(L"Audio Input pin (rendered)", &audioIn);
-                if (hr < 0) {
-                    dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not find audio input pin!  hr=0x%x", hr);
-                    audioPin->Release();
-                    g_splitter->Release();
-                    g_splitter = nullptr;
-                    return hr;
-                }
-                hr = graph->Connect(audioPin, audioIn);
-                audioIn->Release();
-                if (hr < 0) {
-                    dbgPrintf("IShow::m_CreateCTextureRenderer() - ERROR! Could not connect pins!  hr=0x%x", hr);
-                    audioPin->Release();
-                    g_splitter->Release();
-                    g_splitter = nullptr;
-                    return hr;
-                }
-            }
-            audioPin->Release();
-        }
-        g_splitter->Release();
-        // Fix: the original kept the released pointer, used again by the next .avi whose graph
-        // has no "AVI Splitter" (possibly freed by then).
-        g_splitter = nullptr;
-    }
-    LayoutTiles();
-    return 0;
 }

@@ -128,6 +128,18 @@ void DeleteMutex(Mutex *mutex)
 void Lock(Mutex *mutex) { EnterCriticalSection(reinterpret_cast<CRITICAL_SECTION *>(mutex)); }
 void Unlock(Mutex *mutex) { LeaveCriticalSection(reinterpret_cast<CRITICAL_SECTION *>(mutex)); }
 
+// (Event handles are the Windows event handles.)
+Event *NewEvent() { return reinterpret_cast<Event *>(CreateEventA(nullptr, FALSE, FALSE, nullptr)); }
+void DeleteEvent(Event *event) { CloseHandle(reinterpret_cast<HANDLE>(event)); }
+void SetEvent(Event *event) { ::SetEvent(reinterpret_cast<HANDLE>(event)); }
+bool WaitEvent(Event *event)
+{
+    // 0xBF: QS_ALLINPUT of the original's SDK (no QS_SENDMESSAGE / QS_RAWINPUT).
+    HANDLE handle = reinterpret_cast<HANDLE>(event);
+    return MsgWaitForMultipleObjects(1, &handle, FALSE, INFINITE, 0xbf) == WAIT_OBJECT_0;
+}
+HANDLE NativeEvent(Event *event) { return reinterpret_cast<HANDLE>(event); }
+
 // ---------------------------------------------------------------- the window
 
 void SetWindowEvents(WindowEvents *events) { s_events = events; }

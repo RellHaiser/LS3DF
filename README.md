@@ -26,7 +26,7 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 > **Not tested in the game yet.** The whole DLL compiles and links, and much of it is verified
 > against the original DLL by the differential tests below — but nothing that needs a real
 > window, Direct3D device or sound card has run yet: device creation and mode changes, the
-> renderer, video playback, DirectInput, DirectSound start-up, device loss and reset. Try it
+> renderer, video on screen, DirectInput, DirectSound start-up, device loss and reset. Try it
 > only in a copy of the game folder and keep the original DLL.
 
 | Part | Verified against the original by |
@@ -46,7 +46,8 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 | Collision queries (rays, picking, moving spheres) | `compare_collision`: 2,000,000 random queries and scene changes |
 | The lightmap baker | `compare_lightmap`: 20,000 rounds of bakes and light probes |
 | Model, scene, animation and shadow loading | `compare_loader`: all 6,200 of the game's files plus 14 synthetic ones, member by member |
-| The renderer, IGraph's device and window creation, IShow, ISND start-up | compiles and links only |
+| IShow: Ogg music streaming, Bink movies, AVI and other files through DirectShow, into textures | `compare_show`: 80,000 operations on the game's music and movies, 24 AVI playbacks |
+| The renderer, IGraph's device and window creation, ISND start-up, IShow's full-screen playback and drawing | compiles and links only |
 
 The tests are described [below](#tests); each one's header says what it compares and what it
 leaves out.
@@ -84,7 +85,9 @@ OneDrive locks freshly written files and breaks the compiler).
 The tests in [tests/](tests) are differential: each loads the **original** `LS3DF.dll` from your
 copy of the game (it is not part of this repository) and compares it with the port, most of them
 on random operations with a seed, some on the game's own files. They run the original on fake
-Direct3D / DirectSound objects, so they need no graphics or sound hardware.
+Direct3D / DirectSound objects, so they need no graphics or sound hardware. (`compare_show` also
+plays test files through Windows' own DirectShow, and the sound card when there is one: without
+one, the files with sound fail to open on both sides alike.)
 
 - The original: the test's first argument, else `%HD2_DIR%\LS3DF.dll`, else the `LS3DF.dll` on
   the DLL search path. The game folder must be on `PATH` in any case (the original imports
@@ -93,6 +96,8 @@ Direct3D / DirectSound objects, so they need no graphics or sound hardware.
 - `compare_loader` loads the port's built DLL (`build\msvc\LS3DF.dll` with its `.pdb`) next to
   the original, mounts the game's `.dta` archives, and takes the list of file names from the
   archives unpacked to folders: `%HD2_UNPACKED%`, else `HD2_Unpacked` next to the game folder.
+- `compare_show` plays the game's music from the unpacked `Sounds` folder (found the same way) and
+  its movies from the game folder's `Gamemovie`.
 
 ```bat
 set PATH=C:\Games\Hidden and Dangerous 2;%PATH%
@@ -116,9 +121,10 @@ first difference (exit code 1); `compare_loader ... "" all` lists every differen
 | `src/gfx` | the render device all drawing goes through, and its Direct3D 8 backend ([docs/render_device.md](docs/render_device.md)) |
 | `src/audio` | the sound device all sound goes through, and its DirectSound backend ([docs/sound_device.md](docs/sound_device.md)) |
 | `src/input` | the input device IGraph reads the keyboard and mouse through, and its DirectInput backend ([docs/input_device.md](docs/input_device.md)) |
-| `src/platform` | the window and its messages, the cursor, time, threads and locks, and their Win32 implementation ([docs/platform.md](docs/platform.md)) |
+| `src/platform` | the window and its messages, the cursor, time, threads, locks and events, and their Win32 implementation ([docs/platform.md](docs/platform.md)) |
+| `src/video` | the video device IShow plays its movies and DirectShow files through, and its Windows backend: Bink, DirectShow and the texture renderer ([docs/video_device.md](docs/video_device.md)) |
 | `src/isnd` | ISND |
-| `src/dshow` | the DirectShow base classes IShow's texture renderer is built on |
+| `src/dshow` | the DirectShow base classes the video backend's texture renderer is built on |
 | `src/dx` | Direct3D 8 declarations (the Windows SDK no longer has them): the types the renderer uses (`d3d8_types.h`), the interfaces only the backend uses (`d3d8.h`); DirectSound's and DirectInput's types (`dsound_types.h`, `dinput_types.h`); DXGetErrorString8 |
 | `src/external` | the interfaces of `rw_data.dll`, Bink and vorbisfile |
 | `tests` | the differential tests and their fake Direct3D device |

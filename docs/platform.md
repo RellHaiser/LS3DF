@@ -33,8 +33,10 @@ The backend's own policy stays with it. It swallows background erases, the F10 a
 would open the window menu, and the screen saver and monitor power-off.
 
 **Handles.** Windows, menus and instances are the native handles (`HWND`, `HMENU`, `HINSTANCE`),
-because IGraph's interface hands them to the game. Threads and locks are opaque
-(`platform::Thread`, `platform::Mutex`); with Win32 they are thread handles and critical sections.
+because IGraph's interface hands them to the game. Threads, locks and events are opaque
+(`platform::Thread`, `platform::Mutex`, `platform::Event`); with Win32 they are thread handles,
+critical sections and auto-reset events. IShow's Ogg stream thread waits on an event that
+DirectSound sets, so `NativeEvent` gives the sound device the handle.
 
 **Time.** `Milliseconds()` is the engine's clock (`timeGetTime`), and every module reads it through
 the platform now. `TickCount()` is `GetTickCount`, which the voice manager reads in one place, as
@@ -42,8 +44,8 @@ the original does.
 
 **The boundary is checked.** `python build.py` (and `check`) fails when code outside
 `src/platform/win32` calls one of the Windows functions the platform covers: the window, message,
-cursor, thread, lock and time functions, `Sleep`, and `<mmsystem.h>`. IShow and the DirectShow base
-classes keep theirs until the video seam.
+cursor, thread, lock, event and time functions, `Sleep`, and `<mmsystem.h>`. Only the DirectShow
+base classes keep theirs, as part of the Windows video backend ([the video device](video_device.md)).
 
 ## Not covered yet
 

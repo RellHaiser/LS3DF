@@ -50,6 +50,16 @@ void DeleteMutex(Mutex *mutex);
 void Lock(Mutex *mutex);
 void Unlock(Mutex *mutex);
 
+struct Event;                   // opaque: an auto-reset event, initially not set
+
+Event *NewEvent();
+void DeleteEvent(Event *event);
+void SetEvent(Event *event);
+// Waits until the event is set (true), or wakes up early for the thread's window messages (false).
+bool WaitEvent(Event *event);
+// The native handle, for an API that sets the event itself (DirectSound's position notifications).
+HANDLE NativeEvent(Event *event);
+
 // ---------------------------------------------------------------- the window
 
 // What the engine decides about its window. The backend's window procedure and message loop ask

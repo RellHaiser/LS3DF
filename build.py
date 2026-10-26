@@ -85,9 +85,10 @@ def cflags(debug):
             "/I" + SRC, "/I" + os.path.join(ROOT, "include")]
 
 
-# The device seams (docs/render_device.md, sound_device.md, input_device.md): only a backend and the
-# API declarations may name the API's interfaces or include them; the rest of the engine draws
-# through gfx::Device, plays sound through audio::Device and reads input through input::Device.
+# The device seams (docs/render_device.md, sound_device.md, input_device.md, video_device.md): only a
+# backend and the API declarations may name the API's interfaces or include them; the rest of the
+# engine draws through gfx::Device, plays sound through audio::Device, reads input through
+# input::Device and plays videos through video::Device.
 SEAMS = [
     ("the Direct3D 8 backend", ("dx/", "gfx/d3d8/"),
      re.compile(r'#include "dx/d3d8\.h"|#include "gfx/d3d8/|\bIDirect3D\w*8\b|\bg_pD3D\b|\bg_pDevice\b')),
@@ -97,16 +98,22 @@ SEAMS = [
     ("the DirectInput backend", ("dx/", "input/dinput/"),
      re.compile(r'#include <dinput\.h>|#include "input/dinput/|\bIDirectInput\w*|\bLPDIRECTINPUT\w*|'
                 r'\bDirectInput8Create\b')),
-    # The window, its messages, the cursor, time, threads and locks (docs/platform.md). (IShow and
-    # the DirectShow base classes keep theirs until the video seam.)
-    ("the Win32 platform", ("platform/win32/", "dshow/", "igraph/ishow.cpp"),
+    # Bink and DirectShow (with the DirectShow base classes, src/dshow, part of the video backend).
+    ("the Windows video backend", ("dx/", "external/", "dshow/", "video/win32/"),
+     re.compile(r'#include <dshow\.h>|#include "external/bink\.h"|#include "dshow/|#include "video/win32/|'
+                r'\bBink[A-Z]\w*\s*\(|\b(IGraphBuilder|IMediaControl|IMediaSeeking|IBasicAudio|IMediaEvent|'
+                r'CTextureRenderer)\b')),
+    # The window, its messages, the cursor, time, threads, locks and events (docs/platform.md). (The
+    # DirectShow base classes keep theirs: they belong to the video backend.)
+    ("the Win32 platform", ("platform/win32/", "dshow/"),
      re.compile(r'#include <mmsystem\.h>|\b(timeGetTime|GetTickCount|Sleep|CreateWindowExA|RegisterClassExA|'
                 r'DefWindowProcA|PeekMessageA|DispatchMessageA|TranslateMessage|IsDialogMessageA|WaitMessage|'
                 r'SetWindowTextA|SetFocus|UpdateWindow|GetWindowRect|GetSystemMetrics|ClipCursor|SetCursorPos|'
                 r'SystemParametersInfoA|PostQuitMessage|GetForegroundWindow|IsChild|LoadMenuA|LoadCursorA|'
                 r'GetStockObject|GetDesktopWindow|VkKeyScanA|MapVirtualKeyA|CreateThread|SuspendThread|'
                 r'ResumeThread|TerminateThread|SetThreadPriority|WaitForSingleObject|InitializeCriticalSection|'
-                r'DeleteCriticalSection|EnterCriticalSection|LeaveCriticalSection)\s*\(')),
+                r'DeleteCriticalSection|EnterCriticalSection|LeaveCriticalSection|CreateEventA|CloseHandle|'
+                r'MsgWaitForMultipleObjects)\s*\(')),
 ]
 
 

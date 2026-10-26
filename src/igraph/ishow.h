@@ -1,9 +1,10 @@
 // IShow: a streamed video or sound file (vtable 0x1009d9c0, 0x8c bytes; 0x10070d30 - 0x10073720),
 // created by IGraph::CreateIShow. The extension picks the player:
-//   .ogg  Ogg Vorbis (vorbisfile) decoded by a thread into a looping DirectSound buffer (music);
-//   .bik  Bink (binkw32): frames are copied into textures by UpdateVideo;
-//   .avi  DirectShow with the texture renderer filter (CTextureRenderer): frames into textures;
-//   else  DirectShow's own rendering of the file (IGraphBuilder::RenderFile).
+//   .ogg  Ogg Vorbis (vorbisfile) decoded by a thread into a looping sound buffer (music; the
+//         sound device, audio/audio.h);
+//   .bik  a movie of the video device (Bink): frames are copied into textures by UpdateVideo;
+//   .avi  a graph of the video device (DirectShow) whose frames go into the textures;
+//   else  a graph that shows the file with the player's own renderers.
 // A video picture is cut into tiles of at most the device's texture size, each drawn as a
 // screen-space quad over the rectangle given to SetRect (Draw / PlayModal).
 //
@@ -18,18 +19,19 @@
 #include "dx/d3d8_types.h"
 
 class ITexture;
-class CTextureRenderer;
-struct IGraphBuilder;
-struct IMediaControl;
-struct IMediaSeeking;
-struct IBasicAudio;
-struct IMediaEvent;
 struct OggVorbis_File;
-struct BINK;
 namespace ls3d::audio {
 struct Buffer;
 struct Notify;
 }  // namespace ls3d::audio
+namespace ls3d::platform {
+struct Event;
+struct Thread;
+}  // namespace ls3d::platform
+namespace ls3d::video {
+struct Graph;
+struct Movie;
+}  // namespace ls3d::video
 
 // IShow::Open flags (the state bits share the word, IShow::flags).
 enum : uint32_t {
@@ -139,28 +141,30 @@ public:
     // Places the tiles' quads in the screen rectangle (also after the renderer knows the size).
     void LayoutTiles();                                         // 0x10071e20
 
-    IGraphBuilder *graph;                                       // +0x04 kept across files
-    IMediaControl *control;                                     // +0x08
-    IMediaSeeking *seeking;                                     // +0x0C
+    // (The game reads IShow only through its virtual table and the tiles. The members keep the
+    // original's places; the video device's graph holds what +0x08 - +0x18 and +0x50 held.)
+    ls3d::video::Graph *graph;                                  // +0x04 kept across files
+    void *unused08;                                             // +0x08 (IMediaControl)
+    void *unused0C;                                             // +0x0C (IMediaSeeking)
     void *unknown10;                                            // +0x10 never set
-    IBasicAudio *audio;                                         // +0x14
-    IMediaEvent *events;                                        // +0x18
-    BINK *bink;                                                 // +0x1C
+    void *unused14;                                             // +0x14 (IBasicAudio)
+    void *unused18;                                             // +0x18 (IMediaEvent)
+    ls3d::video::Movie *movie;                                  // +0x1C (BINK)
     bool open;                                                  // +0x20
     int refCount;                                               // +0x24
     uint32_t flags;                                             // +0x28 ISHOW_* | ISHOWF_*
     S_showRect rect;                                            // +0x2C
     float volume;                                               // +0x3C
     ls3d::C_vector<S_showTile> tiles;                           // +0x40 (grows by 1)
-    CTextureRenderer *renderer;                                 // +0x50 (owned by the graph)
+    void *unused50;                                             // +0x50 (the texture renderer)
     int frameCount;                                             // +0x54
     int extStream;                                              // +0x58 -1: none
     bool extOpen;                                               // +0x5C
     bool extPaused;                                             // +0x5D
     volatile bool extFinished;                                  // +0x5E set by the player's callback
-    DWORD threadId;                                             // +0x60
-    HANDLE thread;                                              // +0x64
-    HANDLE event;                                               // +0x68 buffer position notifications
+    DWORD threadId;                                             // +0x60 (the thread's id; never read)
+    ls3d::platform::Thread *thread;                             // +0x64
+    ls3d::platform::Event *event;                               // +0x68 buffer position notifications
     ls3d::audio::Notify *notify;                                // +0x6C
     ls3d::audio::Buffer *buffer;                                // +0x70 (DirectSound: its version 8 interface)
     int notifyCount;                                            // +0x74
@@ -173,7 +177,6 @@ public:
 private:
     void FillBuffer(bool whole);                                // 0x10071020
     void CopyFrameToTiles(bool all);                            // 0x10071330
-    HRESULT CreateTextureRenderer(const wchar_t *fileName);     // 0x100729f0
     static DWORD WINAPI StreamThread(void *show);               // 0x10071a70
 };
 static_assert(sizeof(IShow) == 0x8c, "IShow layout");

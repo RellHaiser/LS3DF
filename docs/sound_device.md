@@ -42,8 +42,10 @@ The DirectSound backend's handles are the DirectSound interfaces themselves
 A buffer handle holds whichever buffer interface the engine had (DirectSound 8's extends the
 original); the backend calls only the original's methods on it.
 
-**One escape hatch.** Bink plays its own sound through DirectSound, so IShow hands it the device's
-own object (`Native()`). The video seam will replace this.
+**One escape hatch.** Bink plays its own sound through DirectSound, so the video device's Windows
+backend hands it the sound device's own object (`Native()`, through `video::Device::UseSound`; see
+[the video device](video_device.md)). A new video backend will play its sound through the sound
+device instead.
 
 **The boundary is checked.** `python build.py` (and `check`) fails when code outside `src/dx` and
 `src/audio/dsound` includes `dsound.h` or the backend, or names a DirectSound interface or
@@ -74,8 +76,10 @@ Everything in `audio::Device`:
   broken backend (`SetPan` calling `SetVolume`) shows 21 differences in 20,000 rounds.
 - `compare_texture` compiles IShow, so it compiles the backend too.
 - The rest of the suite gives the same results as before the change.
+- Since the video seam, `compare_show` compares IShow's Ogg streaming on fake DirectSound buffers:
+  the calls, the buffers' bytes and the stream thread's refills.
 
 ## Not covered
 
 Like before, device creation, EAX detection and enumeration need real hardware and are not
-compared, and IShow's streaming only compiles.
+compared.
