@@ -126,6 +126,8 @@ void I3D_scene::UpdateWeather()
     }
     const S_vector streak(-weatherWindStart.x * weatherParam6, -weatherWindStart.y * weatherParam6,
                           -weatherWindStart.z * weatherParam6);
+    // The particles' frame (their shapes' axes) along the current direction, every frame.
+    weatherDirection.SetDir(*reinterpret_cast<const S_vector *>(&weatherWindStart));
     if (!g_weatherVB.vb || g_weatherCapacity < weatherCount)
         SetWeather(10, static_cast<uint32_t>(weatherCount));
     C_VertexBuffer *vb = g_weatherVB.buffer;
@@ -196,9 +198,13 @@ void I3D_scene::UpdateWeather()
             rel = S_vector(p.x - camPos.x, p.y - camPos.y, p.z - camPos.z);
         }
         if ((weatherFlags & WEATHER_SNOW) && dt != 0) {
+            // (x87: the whole int times 0.002f rounded once, FSIN, times 0.004f; both constants
+            // floats.)
             const int phase = seed + g_driverTime;
-            p.x = p.x - static_cast<float>(std::sin(static_cast<double>(static_cast<float>(phase) * 0.002f)) * 0.004);
-            p.z = static_cast<float>(std::sin(static_cast<double>(static_cast<float>(phase + 500) * 0.002f)) * 0.004) + p.z;
+            const float a = static_cast<float>(static_cast<double>(phase) * 0.002f);
+            const float b = static_cast<float>(static_cast<double>(phase + 500) * 0.002f);
+            p.x = p.x - static_cast<float>(std::sin(static_cast<double>(a)) * 0.004f);
+            p.z = static_cast<float>(std::sin(static_cast<double>(b)) * 0.004f) + p.z;
         }
         part->x = p.x;
         part->y = p.y;

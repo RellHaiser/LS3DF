@@ -211,6 +211,17 @@ made room for a level's vertices before reading how many it weights; a lens elem
 material ID took the previous element's (unset for the first, shared without a reference); a
 portal with more than 8 vertices overran the portal.
 
+### The scene's weather
+
+SetWeather's parameters 5 (fall speed, per second) and 7 (particle width, stored halved) are
+floats like 6, 8, 9 and 11 – 13 (the original loads their bits with `fld`; Ghidra prints the same
+`(float)p1` for a conversion), and GetWeather returns them as float bits. UpdateWeather turns the
+particles' frame (weatherDirection) to the streak direction every frame, not only in
+ResetWeather. Unset in the original: the streak direction's w (rain: a local; snow: the word past
+a 3-float result) and the w of the particle shapes' rows. The initial particles and the snow's
+drift follow the original's x87 order: the doubled random part added to the box's corner; the
+drift's whole int phase times 0.002f rounded once, its sine times 0.004f.
+
 ## How the tests work
 
 - Most tests load the original DLL and drive its objects through their vtable slots next to the

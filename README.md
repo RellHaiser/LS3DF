@@ -48,7 +48,8 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 | The lightmap baker | `compare_lightmap`: 20,000 rounds of bakes and light probes |
 | Model, scene, animation and shadow loading | `compare_loader`: all 6,200 of the game's files plus 14 synthetic ones, member by member |
 | IShow: Ogg music streaming, Bink movies, AVI and other files through DirectShow, into textures | `compare_show`: 80,000 operations on the game's music and movies, 24 AVI playbacks |
-| The renderer, IGraph's device and window creation, ISND start-up, IShow's full-screen playback and drawing | not compared with the original; they ran in the first game session (above) |
+| The scene's weather: rain and snow particles, their vertices, the weather settings | `compare_weather`: 140,000 frames, every vertex |
+| The rest of the renderer, IGraph's device and window creation, ISND start-up, IShow's full-screen playback and drawing | not compared with the original; they ran in the first game session (above) |
 
 The tests are described [below](#tests); each one's header says what it compares and what it
 leaves out.
@@ -97,6 +98,7 @@ one, the files with sound fail to open on both sides alike.)
 - `compare_loader` loads the port's built DLL (`build\msvc\LS3DF.dll` with its `.pdb`) next to
   the original, mounts the game's `.dta` archives, and takes the list of file names from the
   archives unpacked to folders: `%HD2_UNPACKED%`, else `HD2_Unpacked` next to the game folder.
+  `compare_weather` loads the built DLL the same way (and needs no game files).
 - `compare_show` plays the game's music from the unpacked `Sounds` folder (found the same way) and
   its movies from the game folder's `Gamemovie`.
 

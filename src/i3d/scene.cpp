@@ -778,8 +778,9 @@ void I3D_scene::SetWeather(int param, uint32_t value)
         weatherColor2 = value;
         weatherFlags |= WEATHER_RECOLOR;
         return;
+    // (5 and 7 are floats as well: the original loads their bits with fld, not fild.)
     case 5:
-        weatherFallSpeed = static_cast<float>(static_cast<int>(value)) * 0.001f;
+        weatherFallSpeed = f * 0.001f;
         return;
     case 6:
         weatherFlags |= WEATHER_RESHAPE;
@@ -787,7 +788,7 @@ void I3D_scene::SetWeather(int param, uint32_t value)
         return;
     case 7:
         weatherFlags |= WEATHER_RESHAPE;
-        weatherParam7 = static_cast<float>(static_cast<int>(value)) * 0.5f;
+        weatherParam7 = f * 0.5f;
         return;
     case 8:
         weatherRangeXZ = f;
@@ -836,13 +837,23 @@ int I3D_scene::GetWeather(int param)
     case 2: return weatherFlags & WEATHER_PARAM2;
     case 3: return static_cast<int>(weatherColor1);
     case 4: return static_cast<int>(weatherColor2);
-    case 5: return static_cast<int>(weatherFallSpeed * 1000.0f);
+    case 5: {
+        const float speed = weatherFallSpeed * 1000.0f;
+        int bits;
+        std::memcpy(&bits, &speed, 4);
+        return bits;
+    }
     case 6: {
         int bits;
         std::memcpy(&bits, &weatherParam6, 4);
         return bits;
     }
-    case 7: return static_cast<int>(weatherParam7 + weatherParam7);
+    case 7: {
+        const float width = weatherParam7 + weatherParam7;
+        int bits;
+        std::memcpy(&bits, &width, 4);
+        return bits;
+    }
     case 8: {
         int bits;
         std::memcpy(&bits, &weatherRangeXZ, 4);
@@ -916,13 +927,14 @@ void I3D_scene::SetWeatherCount(int count)
     }
     weatherParticles.Reserve(weatherCount > have ? weatherCount : have);
     for (int n = weatherCount - have; n != 0; --n) {
+        // (The original doubles the random part first, then adds the box's corner.)
         S_vector4 p;
         const float rx = RandFloat() * weatherRangeXZ;
-        p.x = ((cam.x - weatherRangeXZ) + rx) + rx;
+        p.x = (cam.x - weatherRangeXZ) + (rx + rx);
         const float ry = RandFloat() * weatherRangeY;
-        p.y = ((cam.y - weatherRangeY) + ry) + ry;
+        p.y = (cam.y - weatherRangeY) + (ry + ry);
         const float rz = RandFloat() * weatherRangeXZ;
-        p.z = ((cam.z - weatherRangeXZ) + rz) + rz;
+        p.z = (cam.z - weatherRangeXZ) + (rz + rz);
         p.w = cam.y - weatherRangeY;
         weatherParticles.PushBack(p);
     }
