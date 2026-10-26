@@ -29,7 +29,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace {
@@ -179,7 +179,7 @@ void ReleaseParticleBuffers()
 void FlushParticles()
 {
     if (s_lockedVertices) {
-        s_vbs[s_vbIndex].vb->Unlock();
+        g_pGfx->Unlock(s_vbs[s_vbIndex].vb);
         s_lockedVertices = nullptr;
     }
 }
@@ -901,7 +901,7 @@ S_particleVertex *I3D_emitor::LockVertices(int numQuads, float sortDepth)
     }
     if (!numQuads)
         return nullptr;
-    IDirect3DVertexBuffer8 *vb = s_vbs[s_vbIndex].vb;
+    gfx::VertexBuffer *vb = s_vbs[s_vbIndex].vb;
     if (s_lockedVertices && s_writeQuad + numQuads < kMaxQuads) {
         firstQuad = s_writeQuad;
     } else if (s_writeQuad == kMaxQuads) {
@@ -912,7 +912,7 @@ S_particleVertex *I3D_emitor::LockVertices(int numQuads, float sortDepth)
         }
         if (!vb)                            // (fix: no buffers, InitParticleBuffers failed)
             return nullptr;
-        vb->Lock(0, 0, &s_lockedVertices, 0);
+        g_pGfx->Lock(vb, 0, 0, &s_lockedVertices, 0);
         firstQuad = 0;
         s_writeQuad = numQuads;
         return reinterpret_cast<S_particleVertex *>(s_lockedVertices);
@@ -923,7 +923,7 @@ S_particleVertex *I3D_emitor::LockVertices(int numQuads, float sortDepth)
         }
         if (!vb)
             return nullptr;
-        vb->Lock(0, 0, &s_lockedVertices, 0);
+        g_pGfx->Lock(vb, 0, 0, &s_lockedVertices, 0);
         firstQuad = s_writeQuad;
     }
     s_writeQuad += numQuads;
@@ -1084,34 +1084,34 @@ void I3D_emitor::Draw(const S_renderItem *item)
         SetBlendState(0);
     } else if (emitFlags & EMITF_CUSTOM_BLEND) {
         SetAlphaState(1);
-        g_pDevice->SetRenderState(D3DRS_SRCBLEND, srcBlend);
-        g_pDevice->SetRenderState(D3DRS_DESTBLEND, destBlend);
+        g_pGfx->SetRenderState(D3DRS_SRCBLEND, srcBlend);
+        g_pGfx->SetRenderState(D3DRS_DESTBLEND, destBlend);
     } else {
         SetAlphaState(1);
         SetBlendState(1);
     }
-    g_pDevice->SetTexture(0, item->texture ? item->texture->d3dTexture : nullptr);
-    g_pDevice->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX *>(&kIdentityMatrix));
+    g_pGfx->SetTexture(0, item->texture ? item->texture->deviceTexture : nullptr);
+    g_pGfx->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX *>(&kIdentityMatrix));
     SetColorOp(0, D3DTOP_MODULATE2X);       // 0x1003ec20
     SetAlphaOp(0, D3DTOP_MODULATE);         // 0x1003ec80
     SetColorOp(1, D3DTOP_DISABLE);          // 0x1003ec50
     // (Set past IGraph's address mode cache.)
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, FALSE);
     const S_VBAlloc &vb = s_vbs[s_vbIndex];
     if (vb.buffer) {                        // (fix: no buffers, InitParticleBuffers failed)
         SetVertexFormat(static_cast<int>(vb.buffer->format), false);
-        g_pDevice->SetIndices(s_ib.ib, vb.offset + first);
-        g_pDevice->SetStreamSource(0, vb.vb, vb.buffer->stride);
-        g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, s_ib.offset, numVertices >> 1);
+        g_pGfx->SetIndices(s_ib.ib, vb.offset + first);
+        g_pGfx->SetStreamSource(0, vb.vb, vb.buffer->stride);
+        g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, s_ib.offset, numVertices >> 1);
     }
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, TRUE);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, TRUE);
     if (emitFlags & EMITF_CUSTOM_BLEND) {
         g_rs.blend = 0;
-        g_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        g_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        g_pGfx->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        g_pGfx->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
     }
 }

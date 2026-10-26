@@ -16,7 +16,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 
 namespace ls3d::i3d {
 extern I3D_material *g_resourceMaterial;
@@ -99,7 +99,7 @@ void SetDrawStates(float alpha)
 }
 
 // The material's texture (null without one).
-IDirect3DBaseTexture8 *D3DTexture(const I3D_material *m) { return m->texture ? m->texture->d3dTexture : nullptr; }
+gfx::Texture *DeviceTexture(const I3D_material *m) { return m->texture ? m->texture->deviceTexture : nullptr; }
 
 // The render camera's world matrix moved to `pos` set as the world matrix (text and sprites face
 // the camera); false without a render camera.
@@ -123,9 +123,9 @@ I3D_RESULT I3D_driver::DrawPoint(const S_vector &pos, const S_vector &color, uin
     S_colorVertex v = {pos, PackColor(alpha, color.x, color.y, color.z), 0.0f, 0.0f};
     SetDrawStates(alpha);
     SetBlendState(0);
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     SetVertexFormat(2);
-    return g_pDevice->DrawPrimitiveUP(D3DPT_POINTLIST, 1, &v, sizeof v);
+    return g_pGfx->DrawPrimitiveUP(D3DPT_POINTLIST, 1, &v, sizeof v);
 }
 
 // 0x100166a0
@@ -137,9 +137,9 @@ I3D_RESULT I3D_driver::DrawPoint2D(int x, int y, const S_vector &color, uint32_t
                         PackColor(alpha, color.x, color.y, color.z), 0, 0.0f, 0.0f};
     SetDrawStates(alpha);
     SetBlendState(0);
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     SetVertexFormat(6);
-    return g_pDevice->DrawPrimitiveUP(D3DPT_POINTLIST, 1, &v, sizeof v);
+    return g_pGfx->DrawPrimitiveUP(D3DPT_POINTLIST, 1, &v, sizeof v);
 }
 
 // 0x100168c0
@@ -151,9 +151,9 @@ I3D_RESULT I3D_driver::DrawLine(const S_vector &a, const S_vector &b, const S_ve
     S_colorVertex v[2] = {{a, c, 0.0f, 0.0f}, {b, c, 0.0f, 0.0f}};
     SetDrawStates(alpha);
     SetBlendState(0);
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     SetVertexFormat(2);
-    return g_pDevice->DrawPrimitiveUP(D3DPT_LINELIST, 1, v, sizeof v[0]);
+    return g_pGfx->DrawPrimitiveUP(D3DPT_LINELIST, 1, v, sizeof v[0]);
 }
 
 // 0x10016b00
@@ -165,7 +165,7 @@ I3D_RESULT I3D_driver::DrawLines(const void *positions, int numVerts, const uint
     const uint32_t c = PackColor(alpha, color.x, color.y, color.z);
     SetDrawStates(alpha);
     SetBlendState(0);
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     SetVertexFormat(2);
     s_vertices.ResizeDiscard(numVerts);
     const auto *src = static_cast<const uint8_t *>(positions);
@@ -173,8 +173,8 @@ I3D_RESULT I3D_driver::DrawLines(const void *positions, int numVerts, const uint
         std::memcpy(&s_vertices[i].pos, src, sizeof(S_vector));
         s_vertices[i].color = c;
     }
-    return g_pDevice->DrawIndexedPrimitiveUP(D3DPT_LINELIST, 0, numVerts, static_cast<UINT>(numIndices) >> 1, indices,
-                                             D3DFMT_INDEX16, s_vertices.Data(), sizeof(S_colorVertex));
+    return g_pGfx->DrawIndexedPrimitiveUP(D3DPT_LINELIST, 0, numVerts, static_cast<UINT>(numIndices) >> 1, indices,
+                                          D3DFMT_INDEX16, s_vertices.Data(), sizeof(S_colorVertex));
 }
 
 // 0x10016d50
@@ -207,10 +207,10 @@ I3D_RESULT I3D_driver::DrawTriangles(const void *positions, int numVerts, const 
             }
         }
         if (!uvs)
-            g_pDevice->SetTexture(0, nullptr);
+            g_pGfx->SetTexture(0, nullptr);
         SetVertexFormat(2);
-        g_pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, numVerts, numFaces, indices, D3DFMT_INDEX16,
-                                          s_vertices.Data(), sizeof(S_colorVertex));
+        g_pGfx->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, numVerts, numFaces, indices, D3DFMT_INDEX16,
+                                       s_vertices.Data(), sizeof(S_colorVertex));
     } else {
         s_screenVertices.ResizeDiscard(numVerts);
         for (int i = 0; i < numVerts; ++i, src += stride) {
@@ -224,10 +224,10 @@ I3D_RESULT I3D_driver::DrawTriangles(const void *positions, int numVerts, const 
             }
         }
         if (!uvs)
-            g_pDevice->SetTexture(0, nullptr);
+            g_pGfx->SetTexture(0, nullptr);
         SetVertexFormat(6);
-        g_pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, numVerts, numFaces, indices, D3DFMT_INDEX16,
-                                          s_screenVertices.Data(), sizeof(S_screenVertex));
+        g_pGfx->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, numVerts, numFaces, indices, D3DFMT_INDEX16,
+                                       s_screenVertices.Data(), sizeof(S_screenVertex));
     }
     if (flags & (DRAWF_NO_CULL | DRAWF_CULL_CW))
         SetCullState(3);
@@ -258,9 +258,9 @@ I3D_RESULT I3D_driver::DrawCircle2D(const float *center, float radius, const S_v
     }
     // (The last point is the first again.)
     s_screenVertices[segments] = s_screenVertices[0];
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     SetVertexFormat(6);
-    return g_pDevice->DrawPrimitiveUP(D3DPT_LINESTRIP, segments, s_screenVertices.Data(), sizeof(S_screenVertex));
+    return g_pGfx->DrawPrimitiveUP(D3DPT_LINESTRIP, segments, s_screenVertices.Data(), sizeof(S_screenVertex));
 }
 
 // 0x100175c0
@@ -272,7 +272,7 @@ I3D_RESULT I3D_driver::DrawText3D(const S_vector &pos, const char *text, uint32_
     I3D_RESULT result = 1;
     if (ig::g_rs.cull != 1) {
         ig::g_rs.cull = 1;
-        result = g_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        result = g_pGfx->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
     }
     if (!SetFacingMatrix(pos))
         return result;
@@ -284,7 +284,7 @@ I3D_RESULT I3D_driver::DrawText3D(const S_vector &pos, const char *text, uint32_
     const uint32_t c = PackColor(alpha, m->diffuse.x, m->diffuse.y, m->diffuse.z);
     SetDrawStates(alpha);
     SetBlendState(0);
-    g_pDevice->SetTexture(0, D3DTexture(m));
+    g_pGfx->SetTexture(0, DeviceTexture(m));
     SetVertexFormat(2);
     const float size = scale * 16.0f;
     if (m->matFlags & MATF_ANIMATED)
@@ -313,10 +313,10 @@ I3D_RESULT I3D_driver::DrawText3D(const S_vector &pos, const char *text, uint32_
         v[4] = v[1];
         v[5] = v[0];
     }
-    g_pDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-    g_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, length * 2, s_vertices.Data(), sizeof(S_colorVertex));
+    g_pGfx->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+    g_pGfx->DrawPrimitiveUP(D3DPT_TRIANGLELIST, length * 2, s_vertices.Data(), sizeof(S_colorVertex));
     if (g_driverStates[9])
-        return g_pDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+        return g_pGfx->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
     return I3D_OK;
 }
 
@@ -332,7 +332,7 @@ I3D_RESULT I3D_driver::DrawText2D(int x, int y, const char *text, uint32_t flags
     const uint32_t c = PackColor(alpha, m->diffuse.x, m->diffuse.y, m->diffuse.z);
     SetDrawStates(alpha);
     SetBlendState(0);
-    g_pDevice->SetTexture(0, D3DTexture(m));
+    g_pGfx->SetTexture(0, DeviceTexture(m));
     SetVertexFormat(6);
     const float size = scale * 16.0f;
     if (m->matFlags & MATF_ANIMATED)
@@ -363,21 +363,21 @@ I3D_RESULT I3D_driver::DrawText2D(int x, int y, const char *text, uint32_t flags
         v[4] = v[2];
         v[5] = v[1];
     }
-    g_pDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
-    g_pDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
-    g_pDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-    g_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
-    g_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, length * 2, s_screenVertices.Data(), sizeof(S_screenVertex));
+    g_pGfx->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+    g_pGfx->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+    g_pGfx->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+    g_pGfx->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+    g_pGfx->DrawPrimitiveUP(D3DPT_TRIANGLELIST, length * 2, s_screenVertices.Data(), sizeof(S_screenVertex));
     if (!g_driverStates[0]) {
-        g_pDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_POINT);
-        g_pDevice->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_POINT);
+        g_pGfx->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_POINT);
+        g_pGfx->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTEXF_POINT);
     } else if (ig::g_anisotropy) {
         // (Port enhancement, LS3DF.ini AnisotropicFiltering: back from the text's linear.)
-        g_pDevice->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_ANISOTROPIC);
+        g_pGfx->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTEXF_ANISOTROPIC);
     }
     if (g_driverStates[9])
-        g_pDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
-    return g_pDevice->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
+        g_pGfx->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+    return g_pGfx->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
 }
 
 // 0x10018070
@@ -413,9 +413,9 @@ I3D_RESULT I3D_driver::DrawSprite(const S_vector &pos, I3D_material *material, u
     } else {
         SetAlphaState(0);
     }
-    g_pDevice->SetTexture(0, D3DTexture(material));
+    g_pGfx->SetTexture(0, DeviceTexture(material));
     SetVertexFormat(2);
-    return g_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof v[0]);
+    return g_pGfx->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof v[0]);
 }
 
 // 0x10018400
@@ -425,7 +425,7 @@ I3D_RESULT I3D_driver::DrawBox(const I3D_bbox &box, const S_vector *edgeColor, c
     // Empty boxes (min above max in x, or NaN) are not drawn.
     if (!(box.min.x < box.max.x) && !(box.min.x == box.max.x))
         return I3D_OK;
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     const S_vector4 *corners = BoxCorners(box);
     // (The faces get all 16 bits of `flags`, so the edges' transparency byte reads as DRAWF_*.)
     if (faceColor)

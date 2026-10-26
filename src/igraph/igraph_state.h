@@ -1,5 +1,6 @@
-// IGraph state shared with the rest of the engine (the I3D renderer reads the device, the formats
-// and the render-state cache directly, as the original did with IGraph.cpp's globals).
+// IGraph state shared with the rest of the engine (the I3D renderer reads the formats and the
+// render-state cache directly, as the original did with IGraph.cpp's globals; it draws through the
+// render device, gfx::g_pGfx).
 #pragma once
 
 #include <cstdint>
@@ -9,7 +10,8 @@
 
 #include "core/c_vector.h"
 #include "core/i3d_result.h"
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
+#include "gfx/gfx.h"
 #include "igraph/igraph.h"
 
 class ITexture;
@@ -17,8 +19,6 @@ class IShow;
 
 namespace ls3d::ig {
 
-extern IDirect3D8 *g_pD3D;                      // 0x100d1a94
-extern IDirect3DDevice8 *g_pDevice;             // 0x100d216c
 extern S_IGraphInit g_init;                     // 0x100d1d18
 extern D3DPRESENT_PARAMETERS g_presentParams;   // 0x100d1740
 extern D3DVIEWPORT8 g_viewport;                 // 0x100d1cf0 the device viewport (the I3D renderer sets it too)
@@ -131,14 +131,14 @@ inline void SetZWrite(int on)
 {
     if (g_rs.zWrite != on) {
         g_rs.zWrite = on;
-        g_pDevice->SetRenderState(D3DRS_ZWRITEENABLE, on == 1);
+        gfx::g_pGfx->SetRenderState(D3DRS_ZWRITEENABLE, on == 1);
     }
 }
 inline void SetSpecular(int on)
 {
     if (g_rs.specular != on) {
         g_rs.specular = on;
-        g_pDevice->SetRenderState(D3DRS_SPECULARENABLE, on == 1);
+        gfx::g_pGfx->SetRenderState(D3DRS_SPECULARENABLE, on == 1);
     }
 }
 

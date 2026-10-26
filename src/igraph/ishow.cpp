@@ -92,24 +92,24 @@ void SetVideoStates()
 {
     if (g_rs.alphaOp[0] != D3DTOP_MODULATE) {
         g_rs.alphaOp[0] = D3DTOP_MODULATE;
-        g_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+        gfx::g_pGfx->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
     }
     if (g_rs.colorOp[0] != D3DTOP_MODULATE) {
         g_rs.colorOp[0] = D3DTOP_MODULATE;
-        g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+        gfx::g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     }
     if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
         g_rs.colorOp[1] = D3DTOP_DISABLE;
-        g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        gfx::g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
     }
     if (g_rs.alpha) {
         g_rs.alpha = 0;
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        gfx::g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        gfx::g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
     }
     if (g_rs.fog) {
         g_rs.fog = 0;
-        g_pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        gfx::g_pGfx->SetRenderState(D3DRS_FOGENABLE, FALSE);
     }
 }
 
@@ -806,9 +806,9 @@ HRESULT __stdcall IShow::Draw(bool keepStates)
     UpdateVideo(false);
     if (!keepStates) {
         SetVideoStates();
-        g_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
-        g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
-        g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
+        gfx::g_pGfx->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+        gfx::g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
+        gfx::g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
     }
     for (int i = tiles.Size(); i--;) {
         g_pIGraph->SetTexture(tiles[i].texture, 0);
@@ -816,9 +816,9 @@ HRESULT __stdcall IShow::Draw(bool keepStates)
     }
     if (!keepStates) {
         // (IGraph's cached address modes are not updated)
-        g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
-        g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
-        g_pDevice->SetRenderState(D3DRS_ZENABLE, g_zBufferType);
+        gfx::g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+        gfx::g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+        gfx::g_pGfx->SetRenderState(D3DRS_ZENABLE, g_zBufferType);
     }
     return 0;
 }

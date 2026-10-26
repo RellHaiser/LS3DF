@@ -49,7 +49,7 @@ int DitherChannel(S_errors &err, uint32_t x, uint32_t y, int channel, uint8_t va
 // 0x10077d00. Rows go to the surface at its pitch: the original's undithered 16-bit paths step
 // rows by twice (pitch - 2 * width) + 2 * width bytes and its A8R8G8B8 copy ignores the pitch,
 // which only agree for pitch = row size.
-bool WriteSurface(const ITexture *texture, const uint8_t *bgra, IDirect3DSurface8 *surface, uint32_t width,
+bool WriteSurface(const ITexture *texture, const uint8_t *bgra, gfx::Surface *surface, uint32_t width,
                   uint32_t height, int kind)
 {
     const bool dither = (texture->flags & ITC_DITHER) != 0;
@@ -58,9 +58,9 @@ bool WriteSurface(const ITexture *texture, const uint8_t *bgra, IDirect3DSurface
     if (dither && kind == 0)
         errors = &errorStorage;
     D3DSURFACE_DESC desc;
-    surface->GetDesc(&desc);
+    gfx::g_pGfx->GetDesc(surface, &desc);
     D3DLOCKED_RECT lr;
-    surface->LockRect(&lr, nullptr, 0);
+    gfx::g_pGfx->LockRect(surface, &lr, nullptr, 0);
     uint8_t *bits = static_cast<uint8_t *>(lr.pBits);
     const uint8_t *p = bgra;
     switch (desc.Format) {
@@ -129,7 +129,7 @@ bool WriteSurface(const ITexture *texture, const uint8_t *bgra, IDirect3DSurface
     default:
         break;                                  // (X8R8G8B8 and the rest: left as they are)
     }
-    surface->UnlockRect();
+    gfx::g_pGfx->UnlockRect(surface);
     return true;
 }
 

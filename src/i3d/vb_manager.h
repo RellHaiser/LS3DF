@@ -1,4 +1,4 @@
-// C_VBManager / C_IBManager: pools of Direct3D vertex and index buffers shared by the meshes
+// C_VBManager / C_IBManager: pools of the device's vertex and index buffers shared by the meshes
 // (VBManager.cpp 0x10066020 - 0x10068620, IBManager.cpp 0x10057960 - 0x10058ee0).
 //
 // A manager keeps its buffers in a tree ordered by free space (MSVC 6's multiset, see
@@ -17,7 +17,8 @@
 
 #include "core/c_vector.h"
 #include "core/multiset.h"
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
+#include "gfx/gfx.h"
 
 namespace ls3d {
 
@@ -27,12 +28,12 @@ class C_VertexBuffer;
 // A mesh's piece of a shared buffer (what the managers' Alloc fills in; all zero when none).
 struct S_IBAlloc {
     C_IndexBuffer *buffer;                  // +0x00
-    IDirect3DIndexBuffer8 *ib;              // +0x04
+    gfx::IndexBuffer *ib;                   // +0x04
     uint32_t offset;                        // +0x08 in indices
 };
 struct S_VBAlloc {
     C_VertexBuffer *buffer;                 // +0x00
-    IDirect3DVertexBuffer8 *vb;             // +0x04
+    gfx::VertexBuffer *vb;                  // +0x04
     uint32_t offset;                        // +0x08 in vertices
 };
 
@@ -46,7 +47,7 @@ struct BlockBySize {
     bool operator()(const S_bufferBlock *a, const S_bufferBlock *b) const { return a->count < b->count; }
 };
 
-// One Direct3D index buffer (16-bit indices) and its blocks (0x40 bytes).
+// One device index buffer (16-bit indices) and its blocks (0x40 bytes).
 class C_IndexBuffer {
 public:
     C_IndexBuffer();
@@ -55,7 +56,7 @@ public:
     C_IndexBuffer(const C_IndexBuffer &) = delete;
     C_IndexBuffer &operator=(const C_IndexBuffer &) = delete;
 
-    // 0x10057c90: the Direct3D buffer for at least `count` indices (64K at least; on failure
+    // 0x10057c90: the device buffer for at least `count` indices (64K at least; on failure
     // the resource manager's memory is discarded, then the managed pool tried), left locked.
     bool Create(uint32_t usage, uint32_t count);
     // 0x10057e80: the first free block (by size) that holds `count`; returns its offset or -1.
@@ -74,7 +75,7 @@ public:
     uint32_t lockFlags;                     // +0x04 of the current lock
     uint32_t usage;                         // +0x08 D3DUSAGE_*
     uint32_t pool;                          // +0x0C D3DPOOL
-    IDirect3DIndexBuffer8 *ib;              // +0x10
+    gfx::IndexBuffer *ib;                   // +0x10
     Multiset<S_bufferBlock *, BlockBySize> freeBlocks;  // +0x14
     C_vector<S_bufferBlock *> usedBlocks;   // +0x24
     uint32_t capacity;                      // +0x34 indices
@@ -83,7 +84,7 @@ public:
 };
 static_assert(sizeof(C_IndexBuffer) == 0x40, "C_IndexBuffer layout");
 
-// One Direct3D vertex buffer and its blocks (0x48 bytes).
+// One device vertex buffer and its blocks (0x48 bytes).
 class C_VertexBuffer {
 public:
     C_VertexBuffer();
@@ -108,7 +109,7 @@ public:
     uint32_t pool;                          // +0x0C D3DPOOL
     uint32_t usage;                         // +0x10 D3DUSAGE_*
     uint32_t stride;                        // +0x14 bytes per vertex
-    IDirect3DVertexBuffer8 *vb;             // +0x18
+    gfx::VertexBuffer *vb;                  // +0x18
     Multiset<S_bufferBlock *, BlockBySize> freeBlocks;  // +0x1C
     C_vector<S_bufferBlock *> usedBlocks;   // +0x2C
     uint32_t capacity;                      // +0x3C vertices

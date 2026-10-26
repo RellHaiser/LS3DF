@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
 #include "i3d/i3d.h"
 
 class I3D_sector;

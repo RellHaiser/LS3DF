@@ -9,7 +9,7 @@
 
 namespace ls3d {
 
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using i3d::g_driver;
 
 C_IBManager g_ibManager;
@@ -38,7 +38,7 @@ C_IndexBuffer::~C_IndexBuffer()
     if (lockedData)
         Unlock();
     if (ib)
-        ib->Release();
+        g_pGfx->Release(ib);
     if (g_driver)
         g_driver->SlotB4();
     usedBlocks.Free();
@@ -51,13 +51,13 @@ bool C_IndexBuffer::Create(uint32_t newUsage, uint32_t count)
     capacity = n;
     available = n;
     pool = !(usage & D3DUSAGE_DYNAMIC) && (usage & D3DUSAGE_SOFTWAREPROCESSING) ? D3DPOOL_MANAGED : D3DPOOL_DEFAULT;
-    HRESULT hr = g_pDevice->CreateIndexBuffer(n * 2, usage, D3DFMT_INDEX16, static_cast<D3DPOOL>(pool), &ib);
+    HRESULT hr = g_pGfx->CreateIndexBuffer(n * 2, usage, D3DFMT_INDEX16, static_cast<D3DPOOL>(pool), &ib);
     if (FAILED(hr)) {
-        g_pDevice->ResourceManagerDiscardBytes(0);
-        hr = g_pDevice->CreateIndexBuffer(capacity * 2, usage, D3DFMT_INDEX16, static_cast<D3DPOOL>(pool), &ib);
+        g_pGfx->ResourceManagerDiscardBytes(0);
+        hr = g_pGfx->CreateIndexBuffer(capacity * 2, usage, D3DFMT_INDEX16, static_cast<D3DPOOL>(pool), &ib);
         if (FAILED(hr)) {
             pool = D3DPOOL_MANAGED;
-            hr = g_pDevice->CreateIndexBuffer(capacity * 2, usage, D3DFMT_INDEX16, D3DPOOL_MANAGED, &ib);
+            hr = g_pGfx->CreateIndexBuffer(capacity * 2, usage, D3DFMT_INDEX16, D3DPOOL_MANAGED, &ib);
             if (FAILED(hr)) {
                 dbgPrintf("!! Error detected: %s, File: %s, Line: %i !!", DXGetErrorString8A(hr),
                           "C:\\MyProjects\\Engine8_5\\I3D\\IBManager.cpp", 129);
@@ -69,7 +69,8 @@ bool C_IndexBuffer::Create(uint32_t newUsage, uint32_t count)
     }
     freeBlocks.Insert(new S_bufferBlock{nullptr, 0, capacity});
     g_driver->SlotB4();
-    ib->Lock(0, 0, reinterpret_cast<BYTE **>(&lockedData), (usage & D3DUSAGE_DYNAMIC) << 4);   // D3DLOCK_DISCARD
+    g_pGfx->Lock(ib, 0, 0, reinterpret_cast<BYTE **>(&lockedData),
+                 (usage & D3DUSAGE_DYNAMIC) << 4);      // D3DLOCK_DISCARD
     g_ibManager.AddLocked(this);
     return true;
 }
@@ -143,10 +144,10 @@ uint16_t *C_IndexBuffer::Lock(uint32_t flags)
     if (lockedData) {
         if (!(lockFlags & D3DLOCK_READONLY) || flags)
             return lockedData;
-        ib->Unlock();
+        g_pGfx->Unlock(ib);
     }
     lockFlags = flags;
-    ib->Lock(0, 0, reinterpret_cast<BYTE **>(&lockedData), flags);
+    g_pGfx->Lock(ib, 0, 0, reinterpret_cast<BYTE **>(&lockedData), flags);
     if (lockIndex < 0)
         g_ibManager.AddLocked(this);
     return lockedData;
@@ -156,10 +157,10 @@ void C_IndexBuffer::Unlock()
 {
     if (!lockedData)
         return;
-    ib->Unlock();
+    g_pGfx->Unlock(ib);
     if (!(lockFlags & D3DLOCK_READONLY)) {
-        ib->Lock(0, 0, reinterpret_cast<BYTE **>(&lockedData), 0);
-        ib->Unlock();
+        g_pGfx->Lock(ib, 0, 0, reinterpret_cast<BYTE **>(&lockedData), 0);
+        g_pGfx->Unlock(ib);
     }
     lockedData = nullptr;
     g_ibManager.RemoveLocked(this);
@@ -265,10 +266,10 @@ void C_IBManager::ReleaseDefaultPool()
 void C_IBManager::UnlockAll()
 {
     for (C_IndexBuffer *b : lockedBuffers) {
-        b->ib->Unlock();
+        g_pGfx->Unlock(b->ib);
         if (!(b->lockFlags & D3DLOCK_READONLY)) {
-            b->ib->Lock(0, 0, reinterpret_cast<BYTE **>(&b->lockedData), 0);
-            b->ib->Unlock();
+            g_pGfx->Lock(b->ib, 0, 0, reinterpret_cast<BYTE **>(&b->lockedData), 0);
+            g_pGfx->Unlock(b->ib);
         }
         b->lockedData = nullptr;
         b->lockIndex = -1;

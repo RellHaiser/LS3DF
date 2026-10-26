@@ -20,7 +20,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_viewport;
 
 namespace {
@@ -84,15 +84,15 @@ bool DrawSprite(S_vector p, float w, float h, float alpha, const S_vector4 &colo
         {left, bottom, 0.0f, 1.0f, argb, 0, 0.0f, 1.0f},
         {right, bottom, 0.0f, 1.0f, argb, 0, 1.0f, 1.0f},
     };
-    IDirect3DTexture8 *tex = nullptr;
+    gfx::Texture *texture = nullptr;
     if (m && m->texture) {
         if (m->matFlags & MATF_ANIMATED)
             m->UpdateTexture();
-        tex = m->texture->d3dTexture;
+        texture = m->texture->deviceTexture;
     }
-    g_pDevice->SetTexture(0, tex);
+    g_pGfx->SetTexture(0, texture);
     SetVertexFormat(6);
-    g_pDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(S_vertex));
+    g_pGfx->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(S_vertex));
     return true;
 }
 

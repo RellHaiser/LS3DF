@@ -27,7 +27,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace ls3d::i3d {
@@ -702,7 +702,7 @@ void I3D_scene::Close()
     primarySector->environmentBlend = 0.0f;
     primarySector->environmentTime = 0;
     primarySector->environment.SetDefaults();
-    g_pDevice->ResourceManagerDiscardBytes(0);
+    g_pGfx->ResourceManagerDiscardBytes(0);
     g_vbManager.FreeUnused();
     g_ibManager.FreeUnused();
     for (I3D_shadow *s : shadows)
@@ -1267,20 +1267,20 @@ void SetFog(int on, int mode, float start, float end, uint32_t color)
     } else {
         g_rs.fog = on;
         if (on != 1) {
-            g_pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+            g_pGfx->SetRenderState(D3DRS_FOGENABLE, FALSE);
             return;
         }
-        g_pDevice->SetRenderState(D3DRS_FOGENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_FOGENABLE, TRUE);
     }
     const D3DRENDERSTATETYPE modeState = ig::g_caps & IGCAPS_TABLE_FOG ? D3DRS_FOGTABLEMODE : D3DRS_FOGVERTEXMODE;
     if (g_rs.fogMode != mode) {
         g_rs.fogMode = mode;
         if (mode == 0)
-            g_pDevice->SetRenderState(modeState, D3DFOG_LINEAR);
+            g_pGfx->SetRenderState(modeState, D3DFOG_LINEAR);
         else if (mode == 1)
-            g_pDevice->SetRenderState(modeState, D3DFOG_EXP);
+            g_pGfx->SetRenderState(modeState, D3DFOG_EXP);
         else if (mode == 2)
-            g_pDevice->SetRenderState(modeState, D3DFOG_EXP2);
+            g_pGfx->SetRenderState(modeState, D3DFOG_EXP2);
     }
     auto bits = [](float f) {
         DWORD d;
@@ -1290,19 +1290,19 @@ void SetFog(int on, int mode, float start, float end, uint32_t color)
     if (g_rs.fogMode == 0) {
         if (!IsTinyBits(std::fabs(g_rs.fogEnd - end))) {
             g_rs.fogEnd = end;
-            g_pDevice->SetRenderState(D3DRS_FOGEND, bits(end));
+            g_pGfx->SetRenderState(D3DRS_FOGEND, bits(end));
         }
         if (!IsTinyBits(std::fabs(g_rs.fogStart - start))) {
             g_rs.fogStart = start;
-            g_pDevice->SetRenderState(D3DRS_FOGSTART, bits(start));
+            g_pGfx->SetRenderState(D3DRS_FOGSTART, bits(start));
         }
     } else if (g_rs.fogMode >= 1 && g_rs.fogMode <= 2 && !IsTinyBits(std::fabs(g_rs.fogStart - start))) {
         g_rs.fogStart = start;
-        g_pDevice->SetRenderState(D3DRS_FOGDENSITY, bits(start));
+        g_pGfx->SetRenderState(D3DRS_FOGDENSITY, bits(start));
     }
     if (g_rs.fogColor != color) {
         g_rs.fogColor = color;
-        g_pDevice->SetRenderState(D3DRS_FOGCOLOR, color);
+        g_pGfx->SetRenderState(D3DRS_FOGCOLOR, color);
     }
 }
 

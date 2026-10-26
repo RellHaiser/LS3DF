@@ -25,7 +25,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace ls3d::i3d {
@@ -565,16 +565,16 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
     };
     float fade = 0.0f;
     if (!mat) {
-        g_pDevice->SetMaterial(&ig::g_defaultMaterial);
+        g_pGfx->SetMaterial(&ig::g_defaultMaterial);
         SetColorOp(0, D3DTOP_MODULATE2X);
-        g_pDevice->SetTexture(1, nullptr);
+        g_pGfx->SetTexture(1, nullptr);
         SetColorOp(1, D3DTOP_DISABLE);
         if (g_rs.alpha != 0) {
             g_rs.alpha = 0;
-            g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-            g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+            g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+            g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
         }
-        g_pDevice->SetTexture(0, ig::g_defaultTexture->d3dTexture);
+        g_pGfx->SetTexture(0, ig::g_defaultTexture->deviceTexture);
         ig::SetSpecular(0);
     } else {
         fade = (v->lodFade * v->alpha) * mat->opacity;
@@ -590,26 +590,26 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
             if (static_cast<uint32_t>(cache) != source) {
                 cache = static_cast<int>(source);
                 if (source == 0)
-                    g_pDevice->SetTransform(transform, &ig::g_texProjectXY);
+                    g_pGfx->SetTransform(transform, &ig::g_texProjectXY);
                 else if (source == 1)
-                    g_pDevice->SetTransform(transform, &ig::g_texProjectXZ);
+                    g_pGfx->SetTransform(transform, &ig::g_texProjectXZ);
             }
-            g_pDevice->SetRenderState(D3DRS_LOCALVIEWER, TRUE);
-            g_pDevice->SetTextureStageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2);
-            g_pDevice->SetTextureStageState(stage, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR);
+            g_pGfx->SetRenderState(D3DRS_LOCALVIEWER, TRUE);
+            g_pGfx->SetTextureStageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2);
+            g_pGfx->SetTextureStageState(stage, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR);
         };
         auto factor = [mat]() {
             return (static_cast<uint32_t>(Ftol(static_cast<double>(mat->alpha * 255.0f))) & 0xff) << 24;
         };
         if (!item->texture2) {
-            g_pDevice->SetTexture(1, nullptr);
+            g_pGfx->SetTexture(1, nullptr);
             SetColorOp(1, D3DTOP_DISABLE);
         } else if (!item->texture) {
             // The environment texture alone on stage 0.
             switch (mat->matFlags >> 8 & 7) {
             case 1:
                 SetColorOp(0, D3DTOP_BLENDFACTORALPHA);
-                g_pDevice->SetRenderState(D3DRS_TEXTUREFACTOR, factor());
+                g_pGfx->SetRenderState(D3DRS_TEXTUREFACTOR, factor());
                 break;
             case 2:
                 SetColorOp(0, D3DTOP_BLENDCURRENTALPHA);
@@ -632,23 +632,23 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
                 texGen(0, bits12, g_rs.unknown19c0, D3DTS_TEXTURE0);
                 restore = RESTORE_TEXGEN0;
             } else {
-                g_pDevice->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 1);
+                g_pGfx->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 1);
                 restore = RESTORE_TCI0;
             }
-            g_pDevice->SetTexture(0, item->texture2->d3dTexture);
-            g_pDevice->SetTexture(1, nullptr);
+            g_pGfx->SetTexture(0, item->texture2->deviceTexture);
+            g_pGfx->SetTexture(1, nullptr);
             SetColorOp(1, D3DTOP_DISABLE);
         } else {
             // The texture on stage 0 and the environment texture on stage 1 (bump: 1 and 2).
             uint32_t source = bits12;
             switch (mat->matFlags >> 8 & 7) {
             case 1:
-                g_pDevice->SetRenderState(D3DRS_TEXTUREFACTOR, factor());
+                g_pGfx->SetRenderState(D3DRS_TEXTUREFACTOR, factor());
                 colorOp0 = D3DTOP_SELECTARG1;
                 SetColorOp(1, D3DTOP_BLENDFACTORALPHA);
                 SetAlphaOp(1, D3DTOP_DISABLE);
                 SetColorOp(2, D3DTOP_MODULATE2X);
-                g_pDevice->SetTexture(1, item->texture2->d3dTexture);
+                g_pGfx->SetTexture(1, item->texture2->deviceTexture);
                 restore = RESTORE_STAGE2;
                 break;
             case 2:
@@ -658,7 +658,7 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
                 static const int kOps[] = { 0, 0, D3DTOP_BLENDCURRENTALPHA, D3DTOP_MODULATE, D3DTOP_MODULATE2X, D3DTOP_ADD };
                 SetColorOp(1, kOps[mat->matFlags >> 8 & 7]);
                 SetAlphaOp(1, D3DTOP_MODULATE);
-                g_pDevice->SetTexture(1, item->texture2->d3dTexture);
+                g_pGfx->SetTexture(1, item->texture2->deviceTexture);
                 break;
             }
             case 6:
@@ -671,13 +671,13 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
                 } else {
                     SetColorOp(1, D3DTOP_DISABLE);
                 }
-                g_pDevice->SetTexture(1, item->texture2->d3dTexture);
+                g_pGfx->SetTexture(1, item->texture2->deviceTexture);
                 break;
             case 7:
                 if (!(ig::g_caps & 0x100)) {
                     SetColorOp(1, D3DTOP_MODULATE);
                     SetAlphaOp(1, D3DTOP_MODULATE);
-                    g_pDevice->SetTexture(1, item->texture2->d3dTexture);
+                    g_pGfx->SetTexture(1, item->texture2->deviceTexture);
                     source = 1;
                     break;
                 }
@@ -714,26 +714,26 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
                     SetColorOp(1, D3DTOP_BUMPENVMAP);
                     SetAlphaOp(1, D3DTOP_DISABLE);
                     if (ig::g_bumpAnimTextures[frame])
-                        g_pDevice->SetTexture(1, ig::g_bumpAnimTextures[frame]->d3dTexture);
+                        g_pGfx->SetTexture(1, ig::g_bumpAnimTextures[frame]->deviceTexture);
                     auto bits = [](float f) {
                         DWORD d;
                         std::memcpy(&d, &f, 4);
                         return d;
                     };
-                    g_pDevice->SetTextureStageState(1, D3DTSS_BUMPENVMAT00, bits(bump.m[0][0]));
-                    g_pDevice->SetTextureStageState(1, D3DTSS_BUMPENVMAT01, bits(bump.m[0][1]));
-                    g_pDevice->SetTextureStageState(1, D3DTSS_BUMPENVMAT10, bits(bump.m[1][0]));
-                    g_pDevice->SetTextureStageState(1, D3DTSS_BUMPENVMAT11, bits(bump.m[1][1]));
-                    g_pDevice->SetTexture(2, item->texture2->d3dTexture);
+                    g_pGfx->SetTextureStageState(1, D3DTSS_BUMPENVMAT00, bits(bump.m[0][0]));
+                    g_pGfx->SetTextureStageState(1, D3DTSS_BUMPENVMAT01, bits(bump.m[0][1]));
+                    g_pGfx->SetTextureStageState(1, D3DTSS_BUMPENVMAT10, bits(bump.m[1][0]));
+                    g_pGfx->SetTextureStageState(1, D3DTSS_BUMPENVMAT11, bits(bump.m[1][1]));
+                    g_pGfx->SetTexture(2, item->texture2->deviceTexture);
                     if (g_rs.unknown1780 != 1) {
                         g_rs.unknown1780 = 1;
-                        g_pDevice->SetTransform(D3DTS_TEXTURE2, &ig::g_texProjectXZ);
+                        g_pGfx->SetTransform(D3DTS_TEXTURE2, &ig::g_texProjectXZ);
                     }
-                    g_pDevice->SetTextureStageState(2, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+                    g_pGfx->SetTextureStageState(2, D3DTSS_COLORARG1, D3DTA_TEXTURE);
                     SetColorOp(2, D3DTOP_MODULATE);
-                    g_pDevice->SetRenderState(D3DRS_LOCALVIEWER, TRUE);
-                    g_pDevice->SetTextureStageState(2, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2);
-                    g_pDevice->SetTextureStageState(2, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR);
+                    g_pGfx->SetRenderState(D3DRS_LOCALVIEWER, TRUE);
+                    g_pGfx->SetTextureStageState(2, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2);
+                    g_pGfx->SetTextureStageState(2, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR);
                     restore = RESTORE_BUMP;
                 }
                 break;
@@ -746,11 +746,11 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
             }
         }
         if (mat->matFlags & MATF_CLAMP_U) {
-            g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
+            g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
             restore |= RESTORE_CLAMP_U;
         }
         if (mat->matFlags & MATF_CLAMP_V) {
-            g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
+            g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
             restore |= RESTORE_CLAMP_V;
         }
         // Blending: additive; blended (alpha or faded); color keyed (alpha test); opaque.
@@ -760,18 +760,18 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
             g_rs.alpha = state;
             switch (state) {
             case 0:
-                g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-                g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+                g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+                g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
                 break;
             case 1:
-                g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHAREF, 1);
+                g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHAREF, 1);
                 break;
             case 3:
-                g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-                g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHAREF, g_rs.alphaRef);
+                g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+                g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHAREF, g_rs.alphaRef);
                 break;
             }
         };
@@ -779,8 +779,8 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
             if (g_rs.blend == state)
                 return;
             g_rs.blend = state;
-            g_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-            g_pDevice->SetRenderState(D3DRS_DESTBLEND, state == 1 ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
+            g_pGfx->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+            g_pGfx->SetRenderState(D3DRS_DESTBLEND, state == 1 ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
         };
         const uint32_t f = mat->matFlags;
         if (f & (MATF_ADDITIVE | MATF_ADDITIVE_LOW)) {
@@ -798,48 +798,48 @@ void DrawMeshItem(I3D_object *v, const S_renderItem *item)
         const int cull = static_cast<int>((~f & MATF_TWO_SIDED | 0x8000000) >> 27);
         if (g_rs.cull != cull) {
             g_rs.cull = cull;
-            g_pDevice->SetRenderState(D3DRS_CULLMODE, cull == 3 ? g_rs.cullDefault : cull);
+            g_pGfx->SetRenderState(D3DRS_CULLMODE, cull == 3 ? g_rs.cullDefault : cull);
         }
         if (item->texture) {
             SetColorOp(0, colorOp0);
-            g_pDevice->SetTexture(0, item->texture->d3dTexture);
+            g_pGfx->SetTexture(0, item->texture->deviceTexture);
         } else if (!item->texture2) {
             SetColorOp(0, D3DTOP_MODULATE2X);
-            g_pDevice->SetTexture(0, ig::g_defaultTexture->d3dTexture);
+            g_pGfx->SetTexture(0, ig::g_defaultTexture->deviceTexture);
         }
     }
 
     EnableLights(item->sector->ambientColor, v->lights.count, v->lights.indices);
-    g_pDevice->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX *>(matrix));
+    g_pGfx->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX *>(matrix));
     SetVertexFormat(static_cast<int>(vb->buffer->format));
-    g_pDevice->SetStreamSource(0, vb->vb, vb->buffer->stride);
-    g_pDevice->SetIndices(fg->faces.ib, vb->offset);
-    g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, fg->faces.offset, fg->numFaces);
+    g_pGfx->SetStreamSource(0, vb->vb, vb->buffer->stride);
+    g_pGfx->SetIndices(fg->faces.ib, vb->offset);
+    g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, fg->faces.offset, fg->numFaces);
 
     if (restore & RESTORE_CLAMP_U)
-        g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+        g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
     if (restore & RESTORE_CLAMP_V)
-        g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+        g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
     if (restore & RESTORE_BUMP) {
-        g_pDevice->SetTextureStageState(2, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-        g_pDevice->SetTextureStageState(2, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
-        g_pDevice->SetTextureStageState(2, D3DTSS_TEXCOORDINDEX, 2);
-        g_pDevice->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
+        g_pGfx->SetTextureStageState(2, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+        g_pGfx->SetTextureStageState(2, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+        g_pGfx->SetTextureStageState(2, D3DTSS_TEXCOORDINDEX, 2);
+        g_pGfx->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
         SetColorOp(2, D3DTOP_DISABLE);
-        g_pDevice->SetTexture(2, nullptr);
+        g_pGfx->SetTexture(2, nullptr);
     }
     if (restore & RESTORE_STAGE2)
         SetColorOp(2, D3DTOP_DISABLE);
     if (restore & RESTORE_TEXGEN1) {
-        g_pDevice->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
-        g_pDevice->SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
-        g_pDevice->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
+        g_pGfx->SetTextureStageState(1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+        g_pGfx->SetTextureStageState(1, D3DTSS_TEXCOORDINDEX, 1);
+        g_pGfx->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
     } else if (restore & RESTORE_TCI0) {
-        g_pDevice->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+        g_pGfx->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
     } else if (restore & RESTORE_TEXGEN0) {
-        g_pDevice->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
-        g_pDevice->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
-        g_pDevice->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
+        g_pGfx->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+        g_pGfx->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+        g_pGfx->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
     }
 }
 

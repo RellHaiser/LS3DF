@@ -14,6 +14,7 @@
 // port's own cache file (named apart from the original's), those of the first pass.
 //
 // test-sources: src/igraph/*.cpp src/core/debug.cpp src/core/cpu.cpp src/core/enhance.cpp src/dx/dxerr8.cpp src/i3d/ib_manager.cpp src/i3d/vb_manager.cpp src/dshow/*.cpp
+// test-sources: src/gfx/d3d8/gfx_d3d8.cpp
 #include <windows.h>
 
 #include <float.h>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "../src/core/enhance.h"
+#include "../src/gfx/d3d8/d3d8_device.h"
 #include "../src/i3d/driver.h"
 #include "../src/i3d/i3d_links.h"
 #include "../src/i3d/vb_manager.h"
@@ -346,7 +348,8 @@ std::vector<std::vector<uint8_t>> ExpectedMips(const uint8_t *bgra, int width, i
             out.push_back(level);
         } else {
             FakeSurface s(UINT(w), UINT(h), format, D3DPOOL_MANAGED);
-            ls3d::tex::WriteSurface(texture, level.data(), &s, UINT(w), UINT(h), 0);
+            ls3d::gfx::Surface *surface = ls3d::gfx::d3d8::Handle(static_cast<IDirect3DSurface8 *>(&s));
+            ls3d::tex::WriteSurface(texture, level.data(), surface, UINT(w), UINT(h), 0);
             out.push_back(s.bits);
         }
     }

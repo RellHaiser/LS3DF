@@ -85,6 +85,30 @@ def cflags(debug):
             "/I" + SRC, "/I" + os.path.join(ROOT, "include")]
 
 
+# The render device seam (docs/render_device.md): only the Direct3D 8 backend and the Direct3D
+# declarations may name Direct3D's interfaces or include them; the rest of the engine draws
+# through gfx::Device.
+SEAM_PATTERN = re.compile(r'#include "dx/d3d8\.h"|#include "gfx/d3d8/|\bIDirect3D\w*8\b|\bg_pD3D\b|\bg_pDevice\b')
+SEAM_ALLOWED = ("dx/", "gfx/d3d8/")
+
+
+def check_seams():
+    """Lines outside the backends that use what only a backend may (printed); True when none."""
+    bad = []
+    for d, _, files in os.walk(SRC):
+        for f in files:
+            path = os.path.join(d, f)
+            rel = os.path.relpath(path, SRC).replace("\\", "/")
+            if not f.endswith((".cpp", ".h")) or rel.startswith(SEAM_ALLOWED):
+                continue
+            for n, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
+                if SEAM_PATTERN.search(line):
+                    bad.append("%s(%d): uses the Direct3D 8 backend: %s" % (rel, n, line.strip()))
+    for line in bad:
+        print(line)
+    return not bad
+
+
 def compile_one(src, debug):
     rel = os.path.relpath(src, SRC)
     obj = os.path.join(WORK, "obj", re.sub(r"[\\/]", "_", rel)[:-4] + ".obj")
@@ -203,6 +227,8 @@ def main():
         args.remove(only)
     targets = args or ["dll"]
     ok = True
+    if "check" in targets or "dll" in targets:
+        ok &= check_seams()
     if "check" in targets:
         ok &= compile_all(debug, only)[0]
     if "dll" in targets:

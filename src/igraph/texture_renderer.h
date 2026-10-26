@@ -4,7 +4,7 @@
 #pragma once
 
 #include "dshow/baseclasses.h"
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
 
 class IShow;
 

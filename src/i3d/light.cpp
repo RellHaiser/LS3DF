@@ -27,14 +27,14 @@ void UnregisterLight(I3D_light *light)
         light->linkedLight = -1;
     }
     const uint16_t index = static_cast<uint16_t>(light->hardwareIndex);
-    ig::g_pDevice->LightEnable(index, FALSE);
+    gfx::g_pGfx->LightEnable(index, FALSE);
     g_lights.PopBack();
     const int count = g_lights.Size();
     if (count)
         g_lights[index] = g_lights[count];
     if (index < count) {
         I3D_light *moved = g_lights[index];
-        ig::g_pDevice->LightEnable(static_cast<uint16_t>(moved->hardwareIndex), FALSE);
+        gfx::g_pGfx->LightEnable(static_cast<uint16_t>(moved->hardwareIndex), FALSE);
         moved->hardwareIndex = static_cast<int16_t>(index);
         moved->lightFlags |= 1;
         if (static_cast<uint16_t>(moved->linkedLight) != 0xffff)

@@ -23,7 +23,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace {
@@ -419,36 +419,36 @@ bool MirrorBeginReflection(I3D_mirror *mirror)
 
     // z cleared to 0, then the mirror's faces written with z always: only there can the
     // reflection be drawn.
-    g_pDevice->Clear(0, nullptr, (ig::g_caps & 0x10 | 8) >> 2, 0, 0.0f, 0);
+    g_pGfx->Clear(0, nullptr, (ig::g_caps & 0x10 | 8) >> 2, 0, 0.0f, 0);
     if (g_rs.zFunc != 0) {
         g_rs.zFunc = 0;
-        g_pDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+        g_pGfx->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
     }
     if (g_rs.fog != 0) {
         g_rs.fog = 0;
-        g_pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_FOGENABLE, FALSE);
     }
     if (g_rs.colorOp[0] != D3DTOP_MODULATE) {
         g_rs.colorOp[0] = D3DTOP_MODULATE;
-        g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+        g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     }
     if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
         g_rs.colorOp[1] = D3DTOP_DISABLE;
-        g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
     }
     if (g_rs.alpha != 0) {
         g_rs.alpha = 0;
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
     }
     g_rs.cullDefault = D3DCULL_CCW;
     if (g_rs.cull != 1) {
         g_rs.cull = 1;
-        g_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        g_pGfx->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
     }
     if (g_rs.cull != 3) {
         g_rs.cull = 3;
-        g_pDevice->SetRenderState(D3DRS_CULLMODE, g_rs.cullDefault);
+        g_pGfx->SetRenderState(D3DRS_CULLMODE, g_rs.cullDefault);
     }
     // The world x view x projection matrix, transposed, for the vertex shader.
     float wvp[4][4];
@@ -457,15 +457,15 @@ bool MirrorBeginReflection(I3D_mirror *mirror)
     for (int i = 0; i < 4; ++i)
         for (int j = 0; j < 4; ++j)
             constants[i][j] = wvp[j][i];
-    g_pDevice->SetVertexShaderConstant(0, constants, 4);
+    g_pGfx->SetVertexShaderConstant(0, constants, 4);
     SetVertexFormat(9);
-    g_pDevice->SetIndices(mirror->faces.ib, mirror->colorVertices.offset);
-    g_pDevice->SetStreamSource(0, mirror->colorVertices.vb, mirror->colorVertices.buffer->stride);
-    g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, mirror->numVertices, mirror->faces.offset,
-                                    mirror->numFaces);
+    g_pGfx->SetIndices(mirror->faces.ib, mirror->colorVertices.offset);
+    g_pGfx->SetStreamSource(0, mirror->colorVertices.vb, mirror->colorVertices.buffer->stride);
+    g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, mirror->numVertices, mirror->faces.offset,
+                                 mirror->numFaces);
     if (g_rs.zFunc != 1) {
         g_rs.zFunc = 1;
-        g_pDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+        g_pGfx->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
     }
 
     // Each reflected visual through its copy, placed at the reflected position.
@@ -519,19 +519,19 @@ void MirrorDrawSurface(I3D_mirror *mirror)
     }
     if (g_rs.colorOp[0] != D3DTOP_MODULATE) {
         g_rs.colorOp[0] = D3DTOP_MODULATE;
-        g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+        g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     }
     if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
         g_rs.colorOp[1] = D3DTOP_DISABLE;
-        g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
     }
     g_pIGraph->SetWorldMatrix(&mirror->GetMatrix());
-    g_pDevice->SetTexture(0, nullptr);
+    g_pGfx->SetTexture(0, nullptr);
     SetVertexFormat(static_cast<int>(mirror->colorVertices.buffer->format));
-    g_pDevice->SetIndices(mirror->faces.ib, mirror->colorVertices.offset);
-    g_pDevice->SetStreamSource(0, mirror->colorVertices.vb, mirror->colorVertices.buffer->stride);
-    g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, mirror->numVertices, mirror->faces.offset,
-                                    mirror->numFaces);
+    g_pGfx->SetIndices(mirror->faces.ib, mirror->colorVertices.offset);
+    g_pGfx->SetStreamSource(0, mirror->colorVertices.vb, mirror->colorVertices.buffer->stride);
+    g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, mirror->numVertices, mirror->faces.offset,
+                                 mirror->numFaces);
 }
 
 }  // namespace ls3d::i3d

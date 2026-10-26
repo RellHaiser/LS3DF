@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "../src/gfx/d3d8/d3d8_device.h"
 #include "../src/i3d/vb_manager.h"
 #include "../src/igraph/igraph_state.h"
 #include "fake_d3d8_base.h"

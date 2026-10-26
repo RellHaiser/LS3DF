@@ -9,7 +9,7 @@
 
 namespace ls3d {
 
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using i3d::g_driver;
 
 C_VBManager g_vbManager;
@@ -40,7 +40,7 @@ C_VertexBuffer::~C_VertexBuffer()
     if (g_driver)
         g_driver->SlotB4();
     if (vb)
-        vb->Release();
+        g_pGfx->Release(vb);
     usedBlocks.Free();
 }
 
@@ -54,13 +54,13 @@ bool C_VertexBuffer::Create(uint32_t newUsage, uint32_t newStride, uint32_t coun
     capacity = n;
     available = n;
     pool = !(usage & D3DUSAGE_DYNAMIC) && (usage & D3DUSAGE_SOFTWAREPROCESSING) ? D3DPOOL_MANAGED : D3DPOOL_DEFAULT;
-    HRESULT hr = g_pDevice->CreateVertexBuffer(n * stride, usage, 0, static_cast<D3DPOOL>(pool), &vb);
+    HRESULT hr = g_pGfx->CreateVertexBuffer(n * stride, usage, 0, static_cast<D3DPOOL>(pool), &vb);
     if (FAILED(hr)) {
-        g_pDevice->ResourceManagerDiscardBytes(0);
-        hr = g_pDevice->CreateVertexBuffer(capacity * stride, usage, 0, static_cast<D3DPOOL>(pool), &vb);
+        g_pGfx->ResourceManagerDiscardBytes(0);
+        hr = g_pGfx->CreateVertexBuffer(capacity * stride, usage, 0, static_cast<D3DPOOL>(pool), &vb);
         if (FAILED(hr)) {
             pool = D3DPOOL_MANAGED;
-            hr = g_pDevice->CreateVertexBuffer(capacity * stride, usage, 0, D3DPOOL_MANAGED, &vb);
+            hr = g_pGfx->CreateVertexBuffer(capacity * stride, usage, 0, D3DPOOL_MANAGED, &vb);
             if (FAILED(hr)) {
                 dbgPrintf("!! Error detected: %s, File: %s, Line: %i !!, Bytes allocated: %i", DXGetErrorString8A(hr),
                           "C:\\MyProjects\\Engine8_5\\I3D\\VBManager.cpp", 163, capacity * stride);
@@ -72,7 +72,7 @@ bool C_VertexBuffer::Create(uint32_t newUsage, uint32_t newStride, uint32_t coun
     }
     g_driver->SlotB4();
     freeBlocks.Insert(new S_bufferBlock{nullptr, 0, capacity});
-    vb->Lock(0, 0, &lockedData, (usage & D3DUSAGE_DYNAMIC) << 4);      // D3DLOCK_DISCARD
+    g_pGfx->Lock(vb, 0, 0, &lockedData, (usage & D3DUSAGE_DYNAMIC) << 4); // D3DLOCK_DISCARD
     g_vbManager.AddLocked(this);
     return true;
 }
@@ -146,10 +146,10 @@ uint8_t *C_VertexBuffer::Lock(uint32_t flags)
     if (lockedData) {
         if (!(lockFlags & D3DLOCK_READONLY) || flags)
             return lockedData;
-        vb->Unlock();
+        g_pGfx->Unlock(vb);
     }
     lockFlags = flags;
-    vb->Lock(0, 0, &lockedData, flags);
+    g_pGfx->Lock(vb, 0, 0, &lockedData, flags);
     if (lockIndex < 0)
         g_vbManager.AddLocked(this);
     return lockedData;
@@ -159,7 +159,7 @@ void C_VertexBuffer::Unlock()
 {
     if (!lockedData)
         return;
-    vb->Unlock();
+    g_pGfx->Unlock(vb);
     lockedData = nullptr;
     g_vbManager.RemoveLocked(this);
 }
@@ -279,7 +279,7 @@ void C_VBManager::ReleaseDefaultPool()
 void C_VBManager::UnlockAll()
 {
     for (C_VertexBuffer *b : lockedBuffers) {
-        b->vb->Unlock();
+        g_pGfx->Unlock(b->vb);
         b->lockedData = nullptr;
         b->lockIndex = -1;
     }

@@ -49,6 +49,7 @@
 #include <vector>
 
 #include "../src/external/rw_data.h"
+#include "../src/gfx/d3d8/d3d8_device.h"
 #include "../src/i3d/anim.h"
 #include "../src/i3d/driver.h"
 #include "../src/i3d/joint.h"
@@ -862,11 +863,12 @@ void CompareFakeTexture(const S_ctx &c, FakeTexture *o, FakeTexture *p)
     }
 }
 
-// Pointers to Direct3D objects (the fakes) and to the engine's singletons. True when handled.
+// Pointers to Direct3D objects (the fakes) and to the engine's singletons. True when handled. (The
+// port holds its resources as render device handles, gfx/gfx.h, which are the Direct3D objects.)
 bool CompareSpecial(const S_type &t, uint8_t *o, uint8_t *p, const S_ctx &c)
 {
     const std::string &n = t.name;
-    if (n == "IDirect3DVertexBuffer8") {
+    if (n == "IDirect3DVertexBuffer8" || n == "ls3d::gfx::VertexBuffer") {
         auto *a = static_cast<FakeVB *>(reinterpret_cast<IDirect3DVertexBuffer8 *>(o));
         auto *b = static_cast<FakeVB *>(reinterpret_cast<IDirect3DVertexBuffer8 *>(p));
         CompareBytes(c, reinterpret_cast<uint8_t *>(&a->desc), reinterpret_cast<uint8_t *>(&b->desc), sizeof a->desc);
@@ -877,7 +879,7 @@ bool CompareSpecial(const S_type &t, uint8_t *o, uint8_t *p, const S_ctx &c)
         g_inline.pop_back();
         return true;
     }
-    if (n == "IDirect3DIndexBuffer8") {
+    if (n == "IDirect3DIndexBuffer8" || n == "ls3d::gfx::IndexBuffer") {
         auto *a = static_cast<FakeIB *>(reinterpret_cast<IDirect3DIndexBuffer8 *>(o));
         auto *b = static_cast<FakeIB *>(reinterpret_cast<IDirect3DIndexBuffer8 *>(p));
         CompareBytes(c, reinterpret_cast<uint8_t *>(&a->desc), reinterpret_cast<uint8_t *>(&b->desc), sizeof a->desc);
@@ -888,7 +890,7 @@ bool CompareSpecial(const S_type &t, uint8_t *o, uint8_t *p, const S_ctx &c)
         g_inline.pop_back();
         return true;
     }
-    if (n == "IDirect3DTexture8" || n == "IDirect3DBaseTexture8") {
+    if (n == "IDirect3DTexture8" || n == "IDirect3DBaseTexture8" || n == "ls3d::gfx::Texture") {
         CompareFakeTexture(c, static_cast<FakeTexture *>(reinterpret_cast<IDirect3DTexture8 *>(o)),
                            static_cast<FakeTexture *>(reinterpret_cast<IDirect3DTexture8 *>(p)));
         return true;
@@ -904,7 +906,7 @@ bool CompareSpecial(const S_type &t, uint8_t *o, uint8_t *p, const S_ctx &c)
             Mismatch(c, "not the side's driver");
         return true;
     }
-    return !n.compare(0, 7, "IDirect") || n == "IGraph" || n == "ISND_driver";
+    return !n.compare(0, 7, "IDirect") || n == "ls3d::gfx::Surface" || n == "IGraph" || n == "ISND_driver";
 }
 
 void ComparePointer(ULONG pointee, uint8_t *o, uint8_t *p, const S_ctx &c)
@@ -1256,14 +1258,14 @@ void SetUpRules()
     };
     // Locked buffers: the offset into the fake's bytes.
     g_rules["ls3d::C_VertexBuffer::lockedData"] = [](const S_ctx &c, uint8_t *o, uint8_t *p) {
-        auto *a = static_cast<FakeVB *>(reinterpret_cast<ls3d::C_VertexBuffer *>(c.oObj)->vb);
-        auto *b = static_cast<FakeVB *>(reinterpret_cast<ls3d::C_VertexBuffer *>(c.pObj)->vb);
+        auto *a = static_cast<FakeVB *>(ls3d::gfx::d3d8::D3D(reinterpret_cast<ls3d::C_VertexBuffer *>(c.oObj)->vb));
+        auto *b = static_cast<FakeVB *>(ls3d::gfx::d3d8::D3D(reinterpret_cast<ls3d::C_VertexBuffer *>(c.pObj)->vb));
         if (!a || !b || o - a->data.data() != p - b->data.data())
             Mismatch(c, "locked at different offsets");
     };
     g_rules["ls3d::C_IndexBuffer::lockedData"] = [](const S_ctx &c, uint8_t *o, uint8_t *p) {
-        auto *a = static_cast<FakeIB *>(reinterpret_cast<ls3d::C_IndexBuffer *>(c.oObj)->ib);
-        auto *b = static_cast<FakeIB *>(reinterpret_cast<ls3d::C_IndexBuffer *>(c.pObj)->ib);
+        auto *a = static_cast<FakeIB *>(ls3d::gfx::d3d8::D3D(reinterpret_cast<ls3d::C_IndexBuffer *>(c.oObj)->ib));
+        auto *b = static_cast<FakeIB *>(ls3d::gfx::d3d8::D3D(reinterpret_cast<ls3d::C_IndexBuffer *>(c.pObj)->ib));
         if (!a || !b || o - a->data.data() != p - b->data.data())
             Mismatch(c, "locked at different offsets");
     };

@@ -77,7 +77,7 @@ void I3D_billboard::ComputeMatrix(const S_vector &camera, S_matrix &out)
 uint8_t *C_VertexBuffer::Lock(uint32_t flags)
 {
     if (!lockedData)
-        vb->Lock(0, 0, &lockedData, flags);
+        ls3d::gfx::d3d8::D3D(vb)->Lock(0, 0, &lockedData, flags);
     return lockedData;
 }
 

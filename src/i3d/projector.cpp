@@ -27,7 +27,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace {
@@ -701,43 +701,43 @@ void I3D_projector::Draw(const S_renderItem *item)
         return;
     if (g_rs.colorOp[0] != D3DTOP_MODULATE) {
         g_rs.colorOp[0] = D3DTOP_MODULATE;
-        g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+        g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     }
     if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
         g_rs.colorOp[1] = D3DTOP_DISABLE;
-        g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
     }
     if (g_rs.alpha != 1) {
         g_rs.alpha = 1;
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHAREF, 1);
+        g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHAREF, 1);
     }
     if (mode == 0 || mode == 4 || mode == 8) {
         if (g_rs.blend != 2) {
             g_rs.blend = 2;
-            g_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-            g_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+            g_pGfx->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+            g_pGfx->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
         }
     } else {
         if (g_rs.blend != 0) {
             g_rs.blend = 0;
-            g_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-            g_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            g_pGfx->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+            g_pGfx->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
         }
         if (g_rs.alphaOp[0] != D3DTOP_MODULATE) {
             g_rs.alphaOp[0] = D3DTOP_MODULATE;
-            g_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+            g_pGfx->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
         }
     }
     if (g_rs.cull != 3) {
         g_rs.cull = 3;
-        g_pDevice->SetRenderState(D3DRS_CULLMODE, g_rs.cullDefault);
+        g_pGfx->SetRenderState(D3DRS_CULLMODE, g_rs.cullDefault);
     }
-    g_pDevice->SetTexture(0, DrawnTexture(this)->d3dTexture);
+    g_pGfx->SetTexture(0, DrawnTexture(this)->deviceTexture);
     g_pIGraph->SetWorldMatrix(&GetMatrix());
     SetZBias(g_projectorZBias);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, FALSE);
     // (Both queued items have the texture, so both draw the opaque faces: the original's.)
     const bool opaque = item->texture != nullptr;
     if (!(projFlags & PROJF_BUFFERED)) {
@@ -748,12 +748,12 @@ void I3D_projector::Draw(const S_renderItem *item)
                                             IGV_COLOR_TEX);
     } else {
         SetVertexFormat(2);
-        g_pDevice->SetStreamSource(0, vb.vb, sizeof(S_projectedVertex));
+        g_pGfx->SetStreamSource(0, vb.vb, sizeof(S_projectedVertex));
         // (The blended faces offset the base vertex, not the first index: the original's.)
-        g_pDevice->SetIndices(ib.ib, (opaque ? 0 : numOpaque * 3) + vb.offset);
-        g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, ib.offset, opaque ? numOpaque : numBlended);
+        g_pGfx->SetIndices(ib.ib, (opaque ? 0 : numOpaque * 3) + vb.offset);
+        g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, ib.offset, opaque ? numOpaque : numBlended);
     }
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, TRUE);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, TRUE);
 }
 
 namespace ls3d::i3d {

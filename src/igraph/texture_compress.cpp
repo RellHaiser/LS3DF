@@ -7,18 +7,18 @@
 namespace ls3d::tex {
 
 // `kind` 1: X1R5G5B5 to DXT1, 2: A1R5G5B5 to DXT1 with transparency, 3: A4R4G4B4 to DXT3.
-bool CompressSurface(const char *name, int kind, IDirect3DSurface8 *source, IDirect3DSurface8 *dest)
+bool CompressSurface(const char *name, int kind, gfx::Surface *source, gfx::Surface *dest)
 {
     // Error weights of red, green, blue (luminance).
     static const float kWeights[3] = {0.3086f, 0.6094f, 0.082f};
     D3DSURFACE_DESC desc;
-    if (FAILED(source->GetDesc(&desc)))
+    if (FAILED(gfx::g_pGfx->GetDesc(source, &desc)))
         return false;
     D3DLOCKED_RECT srcLock, dstLock;
-    if (FAILED(source->LockRect(&srcLock, nullptr, D3DLOCK_READONLY)))
+    if (FAILED(gfx::g_pGfx->LockRect(source, &srcLock, nullptr, D3DLOCK_READONLY)))
         return false;
-    if (FAILED(dest->LockRect(&dstLock, nullptr, 0))) {
-        source->UnlockRect();           // (left locked by the original)
+    if (FAILED(gfx::g_pGfx->LockRect(dest, &dstLock, nullptr, 0))) {
+        gfx::g_pGfx->UnlockRect(source); // (left locked by the original)
         return false;
     }
 
@@ -64,8 +64,8 @@ bool CompressSurface(const char *name, int kind, IDirect3DSurface8 *source, IDir
     s3tc::Encode(&src, nullptr, &dst, dstLock.pBits, type, kWeights);
     if (verbose)
         g_pIGraph->SetAppNameF("");
-    source->UnlockRect();
-    dest->UnlockRect();
+    gfx::g_pGfx->UnlockRect(source);
+    gfx::g_pGfx->UnlockRect(dest);
     return true;
 }
 

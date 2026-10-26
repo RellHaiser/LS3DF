@@ -15,7 +15,7 @@
 #include <windows.h>
 
 #include "core/c_vector.h"
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
 
 class ITexture;
 class CTextureRenderer;

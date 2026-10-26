@@ -15,7 +15,7 @@
 
 namespace ls3d::i3d {
 
-using ig::g_pDevice;
+using gfx::g_pGfx;
 
 I3D_mirror *g_renderMirror;
 
@@ -48,7 +48,7 @@ void SetZBias(int bias)
 {
     if (ig::g_rs.zBias != bias) {
         ig::g_rs.zBias = bias;
-        g_pDevice->SetRenderState(D3DRS_ZBIAS, bias);
+        g_pGfx->SetRenderState(D3DRS_ZBIAS, bias);
     }
 }
 
@@ -61,31 +61,31 @@ void SetVertexFormat(int format, bool force)
     switch (format) {
     case 0:
     case 8:
-        g_pDevice->SetVertexShader(ig::g_vsNormalTex1);
+        g_pGfx->SetVertexShader(ig::g_vsNormalTex1);
         break;
     case 1:
-        g_pDevice->SetVertexShader(ig::g_vsNormalTex2);
+        g_pGfx->SetVertexShader(ig::g_vsNormalTex2);
         break;
     case 2:
-        g_pDevice->SetVertexShader(ig::g_vsColorTex1);
+        g_pGfx->SetVertexShader(ig::g_vsColorTex1);
         break;
     case 3:
-        g_pDevice->SetVertexShader(ig::g_vsColorTex2);
+        g_pGfx->SetVertexShader(ig::g_vsColorTex2);
         break;
     case 4:
-        g_pDevice->SetVertexShader(0x40);
+        g_pGfx->SetVertexShader(0x40);
         break;
     case 5:
-        g_pDevice->SetVertexShader(0x140);
+        g_pGfx->SetVertexShader(0x140);
         break;
     case 6:
-        g_pDevice->SetVertexShader(0x1c4);
+        g_pGfx->SetVertexShader(0x1c4);
         break;
     case 7:
-        g_pDevice->SetVertexShader(0x2c4);
+        g_pGfx->SetVertexShader(0x2c4);
         break;
     case 9:
-        g_pDevice->SetVertexShader(ig::g_vsFarPlane);
+        g_pGfx->SetVertexShader(ig::g_vsFarPlane);
         break;
     default:
         break;
@@ -96,7 +96,7 @@ void SetColorOp(int stage, int op)
 {
     if (ig::g_rs.colorOp[stage] != op) {
         ig::g_rs.colorOp[stage] = op;
-        g_pDevice->SetTextureStageState(stage, D3DTSS_COLOROP, op);
+        g_pGfx->SetTextureStageState(stage, D3DTSS_COLOROP, op);
     }
 }
 
@@ -104,7 +104,7 @@ void SetAlphaOp(int stage, int op)
 {
     if (ig::g_rs.alphaOp[stage] != op) {
         ig::g_rs.alphaOp[stage] = op;
-        g_pDevice->SetTextureStageState(stage, D3DTSS_ALPHAOP, op);
+        g_pGfx->SetTextureStageState(stage, D3DTSS_ALPHAOP, op);
     }
 }
 
@@ -112,7 +112,7 @@ void DisableFog()
 {
     if (ig::g_rs.fog != 0) {
         ig::g_rs.fog = 0;
-        g_pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_FOGENABLE, FALSE);
     }
 }
 
@@ -122,7 +122,7 @@ void SetCullState(int state)
     if (ig::g_rs.cull == state)
         return;
     ig::g_rs.cull = state;
-    g_pDevice->SetRenderState(D3DRS_CULLMODE, state == 3 ? ig::g_rs.cullDefault : state);
+    g_pGfx->SetRenderState(D3DRS_CULLMODE, state == 3 ? ig::g_rs.cullDefault : state);
 }
 
 // 0x1001b4b0
@@ -133,23 +133,23 @@ void SetAlphaState(int state)
     ig::g_rs.alpha = state;
     switch (state) {
     case 0:
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
         break;
     case 1:
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHAREF, 1);
+        g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHAREF, 1);
         break;
     case 2:
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHAREF, 0);
+        g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHAREF, 0);
         break;
     case 3:
-        g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-        g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-        g_pDevice->SetRenderState(D3DRS_ALPHAREF, ig::g_rs.alphaRef);
+        g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+        g_pGfx->SetRenderState(D3DRS_ALPHAREF, ig::g_rs.alphaRef);
         break;
     default:
         break;
@@ -169,8 +169,8 @@ void SetBlendState(int state)
     };
     if (state < 0 || state > 4)
         return;
-    g_pDevice->SetRenderState(D3DRS_SRCBLEND, kBlend[state][0]);
-    g_pDevice->SetRenderState(D3DRS_DESTBLEND, kBlend[state][1]);
+    g_pGfx->SetRenderState(D3DRS_SRCBLEND, kBlend[state][0]);
+    g_pGfx->SetRenderState(D3DRS_DESTBLEND, kBlend[state][1]);
 }
 
 // 0x10063810
@@ -192,11 +192,11 @@ void SetMaterial(D3DMATERIAL8 &material, float alpha, float level)
         s_scaledMaterial.Emissive.g = level * material.Emissive.g;
         s_scaledMaterial.Emissive.b = level * material.Emissive.b;
         s_scaledMaterial.Power = material.Power;
-        g_pDevice->SetMaterial(&s_scaledMaterial);
+        g_pGfx->SetMaterial(&s_scaledMaterial);
         return;
     }
     material.Diffuse.a = alpha;
-    g_pDevice->SetMaterial(&material);
+    g_pGfx->SetMaterial(&material);
 }
 
 // 0x10063930
@@ -242,18 +242,18 @@ void EnableLights(uint32_t ambient, int count, const uint16_t *indices)
 {
     if (ambient != s_ambient) {
         s_ambient = ambient;
-        g_pDevice->SetRenderState(D3DRS_AMBIENT, ambient);
+        g_pGfx->SetRenderState(D3DRS_AMBIENT, ambient);
     }
     for (int i = 0; i < s_numEnabledLights; ++i)
-        g_pDevice->LightEnable(s_enabledLights[i], FALSE);
+        g_pGfx->LightEnable(s_enabledLights[i], FALSE);
     for (int i = 0; i < count; ++i) {
         const uint16_t index = indices[i];
         I3D_light *light = g_lights[index];
         if (light->lightFlags & LIGHTF_DIRTY) {
-            g_pDevice->SetLight(index, &light->d3dLight);
+            g_pGfx->SetLight(index, &light->d3dLight);
             light->lightFlags &= ~LIGHTF_DIRTY;
         }
-        g_pDevice->LightEnable(index, TRUE);
+        g_pGfx->LightEnable(index, TRUE);
     }
     std::memcpy(s_enabledLights, indices, sizeof(uint16_t) * static_cast<size_t>(count));
     s_numEnabledLights = count;
@@ -418,7 +418,7 @@ void InvalidateLights()
         if (light->lightType == I3DLIGHT_POINT || light->lightType == I3DLIGHT_SPOT ||
             light->lightType == I3DLIGHT_DIRECTIONAL) {
             light->lightFlags |= LIGHTF_DIRTY;
-            g_pDevice->LightEnable(static_cast<uint16_t>(light->hardwareIndex), FALSE);
+            g_pGfx->LightEnable(static_cast<uint16_t>(light->hardwareIndex), FALSE);
         }
     }
 }

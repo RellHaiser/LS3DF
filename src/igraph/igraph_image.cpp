@@ -262,19 +262,19 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
     if (!toMemory && !std::strstr(fileName, ".TGA") && !std::strstr(fileName, ".tga"))
         dbgPrintf("!!IGraph::SaveShot() - WARNING! File extension isn't .TGA !! %s", fileName);
 
-    IDirect3DSurface8 *target = nullptr;
-    IDirect3DSurface8 *image = nullptr;
-    if (g_pDevice->GetRenderTarget(&target) < 0)
+    gfx::Surface *target = nullptr;
+    gfx::Surface *image = nullptr;
+    if (gfx::g_pGfx->GetRenderTarget(&target) < 0)
         return false;
     D3DSURFACE_DESC desc;
-    if (target->GetDesc(&desc) < 0) {
-        target->Release();
+    if (gfx::g_pGfx->GetDesc(target, &desc) < 0) {
+        gfx::g_pGfx->Release(target);
         return false;
     }
     if (!rect) {
-        g_pDevice->CreateImageSurface(desc.Width, desc.Height, desc.Format, &image);
-        if (g_pDevice->CopyRects(target, nullptr, 0, image, nullptr) < 0) {
-            target->Release();
+        gfx::g_pGfx->CreateImageSurface(desc.Width, desc.Height, desc.Format, &image);
+        if (gfx::g_pGfx->CopyRects(target, nullptr, 0, image, nullptr) < 0) {
+            gfx::g_pGfx->Release(target);
             return false;
         }
     } else {
@@ -282,23 +282,23 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
         desc.Width = rect->right;
         desc.Height = rect->bottom;
         desc.Size = 0;
-        g_pDevice->CreateImageSurface(desc.Width, desc.Height, desc.Format, &image);
+        gfx::g_pGfx->CreateImageSurface(desc.Width, desc.Height, desc.Format, &image);
         const POINT origin = {0, 0};
-        if (g_pDevice->CopyRects(target, rect, 1, image, &origin) < 0) {
-            target->Release();
+        if (gfx::g_pGfx->CopyRects(target, rect, 1, image, &origin) < 0) {
+            gfx::g_pGfx->Release(target);
             return false;
         }
     }
     D3DLOCKED_RECT lr;
-    if (image->LockRect(&lr, nullptr, D3DLOCK_READONLY) < 0) {
-        target->Release();
-        image->Release();
+    if (gfx::g_pGfx->LockRect(image, &lr, nullptr, D3DLOCK_READONLY) < 0) {
+        gfx::g_pGfx->Release(target);
+        gfx::g_pGfx->Release(image);
         return false;
     }
     auto finish = [&](bool result) {
-        image->UnlockRect();
-        image->Release();
-        target->Release();
+        gfx::g_pGfx->UnlockRect(image);
+        gfx::g_pGfx->Release(image);
+        gfx::g_pGfx->Release(target);
         return result;
     };
 
@@ -308,12 +308,12 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
             dbgPrintf("!!IGraph::SaveShot() - ERROR! Z-buffer pixel format isn't LOCKABLE !!");
             return finish(false);
         }
-        IDirect3DSurface8 *depth = nullptr;
-        g_pDevice->GetDepthStencilSurface(&depth);
+        gfx::Surface *depth = nullptr;
+        gfx::g_pGfx->GetDepthStencilSurface(&depth);
         D3DLOCKED_RECT dlr;
-        if (depth->LockRect(&dlr, rect, D3DLOCK_READONLY) < 0) {
+        if (gfx::g_pGfx->LockRect(depth, &dlr, rect, D3DLOCK_READONLY) < 0) {
             dbgPrintf("!!IGraph::SaveShot() - ERROR! Z-buffer pixel format isn't LOCKABLE !!");
-            depth->Release();
+            gfx::g_pGfx->Release(depth);
             return finish(false);
         }
         char rlaName[0x100] = {};               // (uninitialised in the original without a '.')
@@ -334,8 +334,8 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
         }
         FILE *f = std::fopen(rlaName, "wb");
         if (!f) {
-            depth->UnlockRect();
-            depth->Release();
+            gfx::g_pGfx->UnlockRect(depth);
+            gfx::g_pGfx->Release(depth);
             dbgPrintf("IGraph::SaveShot() - Cannot create file %s !!!", rlaName);
             return finish(false);
         }
@@ -369,8 +369,8 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
 
         uint32_t *offsets = static_cast<uint32_t *>(::operator new(sizeof(uint32_t) * height, std::nothrow));
         if (!offsets) {
-            depth->UnlockRect();
-            depth->Release();
+            gfx::g_pGfx->UnlockRect(depth);
+            gfx::g_pGfx->Release(depth);
             dbgPrintf("IGraph::SaveShot() - Error saving depth !");
             std::fclose(f);
             return finish(false);
@@ -434,8 +434,8 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
         ::operator delete(line);
         ::operator delete(z);
         ::operator delete(rgb);
-        depth->UnlockRect();
-        depth->Release();
+        gfx::g_pGfx->UnlockRect(depth);
+        gfx::g_pGfx->Release(depth);
         return finish(true);
     }
 
@@ -459,12 +459,12 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
 
     if (toMemory) {
         if ((flags & IGSHOT_DEPTH) && depthBuffer) {
-            IDirect3DSurface8 *depth = nullptr;
-            g_pDevice->GetDepthStencilSurface(&depth);
+            gfx::Surface *depth = nullptr;
+            gfx::g_pGfx->GetDepthStencilSurface(&depth);
             D3DLOCKED_RECT dlr;
-            if (depth->LockRect(&dlr, rect, D3DLOCK_READONLY) < 0) {
+            if (gfx::g_pGfx->LockRect(depth, &dlr, rect, D3DLOCK_READONLY) < 0) {
                 dbgPrintf("!!IGraph::SaveShot() - ERROR! Z-buffer pixel format isn't LOCKABLE !!");
-                depth->Release();
+                gfx::g_pGfx->Release(depth);
                 return finish(false);
             }
             const uint8_t *row = static_cast<const uint8_t *>(dlr.pBits) + (height - 1) * dlr.Pitch;
@@ -474,8 +474,8 @@ bool __stdcall IGraph::SaveShot(void *fileNameOrBuffer, const RECT *rect, uint32
                 dst += width * 2;
                 row -= dlr.Pitch;
             }
-            depth->UnlockRect();
-            depth->Release();
+            gfx::g_pGfx->UnlockRect(depth);
+            gfx::g_pGfx->Release(depth);
         }
         const uint8_t *row = static_cast<const uint8_t *>(lr.pBits) + (height - 1) * lr.Pitch;
         uint8_t *dst = static_cast<uint8_t *>(fileNameOrBuffer);

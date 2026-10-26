@@ -27,7 +27,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 
 namespace ls3d::i3d {
 
@@ -1260,24 +1260,24 @@ void I3D_shadow_visual::Draw(const S_renderItem *item)
     SetAlphaState(1);
     SetBlendState(0);
     SetCullState(3);
-    g_pDevice->SetTexture(0, owner->texture->d3dTexture);
+    g_pGfx->SetTexture(0, owner->texture->deviceTexture);
     g_pIGraph->SetWorldMatrix(&GetMatrix());
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, FALSE);
     SetZBias(g_state37Value);
     // (Both queued items carry the map: each draws the opaque materials' part; the blended part
     // is drawn only for an item without a texture.)
     const bool first = item->texture != nullptr;
     if (owner->mode == 3) {
         SetVertexFormat(2);
-        g_pDevice->SetStreamSource(0, vb.vb, sizeof(S_vertex));
+        g_pGfx->SetStreamSource(0, vb.vb, sizeof(S_vertex));
         if (first) {
-            g_pDevice->SetIndices(ib.ib, vb.offset);
-            g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, ib.offset, numOpaqueFaces);
+            g_pGfx->SetIndices(ib.ib, vb.offset);
+            g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, ib.offset, numOpaqueFaces);
         } else {
-            g_pDevice->SetIndices(ib.ib, numOpaqueFaces * 3 + vb.offset);
-            g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, ib.offset, numBlendedFaces);
+            g_pGfx->SetIndices(ib.ib, numOpaqueFaces * 3 + vb.offset);
+            g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, numVertices, ib.offset, numBlendedFaces);
         }
     } else if (first) {
         g_pIGraph->DrawIndexedPrimitive(IGP_TRIANGLES, numVertices, faceIndices, numOpaqueFaces, vertices, IGV_COLOR_TEX);
@@ -1285,7 +1285,7 @@ void I3D_shadow_visual::Draw(const S_renderItem *item)
         g_pIGraph->DrawIndexedPrimitive(IGP_TRIANGLES, numVertices, faceIndices + numOpaqueFaces * 3, numBlendedFaces,
                                         vertices, IGV_COLOR_TEX);
     }
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
-    g_pDevice->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, TRUE);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSU, D3DTADDRESS_WRAP);
+    g_pGfx->SetTextureStageState(0, D3DTSS_ADDRESSV, D3DTADDRESS_WRAP);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, TRUE);
 }

@@ -15,6 +15,7 @@
 // Usage: compare_buffers.exe [original LS3DF.dll] [operations] [seed]
 //
 // test-sources: src/i3d/ib_manager.cpp src/i3d/vb_manager.cpp src/core/debug.cpp src/dx/dxerr8.cpp
+// test-sources: src/gfx/d3d8/gfx_d3d8.cpp
 #include "../src/core/debug.h"
 #include "../src/i3d/driver.h"
 #include "../src/i3d/vb_manager.h"
@@ -26,9 +27,6 @@
 
 namespace ls3d::i3d {
 I3D_driver *g_driver;
-}
-namespace ls3d::ig {
-IDirect3DDevice8 *g_pDevice;
 }
 
 namespace {

@@ -6,7 +6,7 @@
 // The sectors it was added to (I3D_sector::AddLight) recount their lighting when it changes.
 #pragma once
 
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
 
 #include "core/c_vector.h"
 #include "i3d/frame.h"

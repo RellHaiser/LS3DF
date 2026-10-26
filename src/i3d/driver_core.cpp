@@ -45,7 +45,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 
 namespace ls3d::i3d {
 
@@ -288,12 +288,12 @@ I3D_RESULT I3D_driver::SetState(int state, uint32_t value)
         return I3DERR_INVALIDPARAMS;
     auto filters = [](DWORD minFilter, DWORD magFilter) {
         for (DWORD stage = 0; stage < 3; ++stage) {
-            g_pDevice->SetTextureStageState(stage, D3DTSS_MINFILTER, minFilter);
-            g_pDevice->SetTextureStageState(stage, D3DTSS_MAGFILTER, magFilter);
+            g_pGfx->SetTextureStageState(stage, D3DTSS_MINFILTER, minFilter);
+            g_pGfx->SetTextureStageState(stage, D3DTSS_MAGFILTER, magFilter);
             // (Port enhancement, LS3DF.ini AnisotropicFiltering; set again here after a device
             // reset cleared it.)
             if (minFilter == D3DTEXF_ANISOTROPIC)
-                g_pDevice->SetTextureStageState(stage, D3DTSS_MAXANISOTROPY, static_cast<DWORD>(ig::g_anisotropy));
+                g_pGfx->SetTextureStageState(stage, D3DTSS_MAXANISOTROPY, static_cast<DWORD>(ig::g_anisotropy));
         }
     };
     switch (state) {
@@ -314,26 +314,26 @@ I3D_RESULT I3D_driver::SetState(int state, uint32_t value)
                 mipFilter = D3DTEXF_LINEAR;
             }
             for (DWORD stage = 0; stage < 3; ++stage)
-                g_pDevice->SetTextureStageState(stage, D3DTSS_MIPFILTER, mipFilter);
+                g_pGfx->SetTextureStageState(stage, D3DTSS_MIPFILTER, mipFilter);
         }
         break;
     case 3:
-        g_pDevice->SetRenderState(D3DRS_ZENABLE, value ? ig::g_zBufferType : 0);
+        g_pGfx->SetRenderState(D3DRS_ZENABLE, value ? ig::g_zBufferType : 0);
         break;
     case 4:
         ig::g_zBufferType = value ? D3DZB_USEW : D3DZB_TRUE;
         if (g_driverStates[DRVSTATE_ZBUFFER])
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
         break;
     case 7:
-        g_pDevice->SetRenderState(D3DRS_DITHERENABLE, value);
+        g_pGfx->SetRenderState(D3DRS_DITHERENABLE, value);
         break;
     case 8:
-        g_pDevice->SetTextureStageState(0, D3DTSS_MIPMAPLODBIAS, value);
-        g_pDevice->SetTextureStageState(1, D3DTSS_MIPMAPLODBIAS, value);
+        g_pGfx->SetTextureStageState(0, D3DTSS_MIPMAPLODBIAS, value);
+        g_pGfx->SetTextureStageState(1, D3DTSS_MIPMAPLODBIAS, value);
         break;
     case 9:
-        g_pDevice->SetRenderState(D3DRS_FILLMODE, value ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
+        g_pGfx->SetRenderState(D3DRS_FILLMODE, value ? D3DFILL_WIREFRAME : D3DFILL_SOLID);
         break;
     case DRVSTATE_DRAW_VISUALS:
         if (value)

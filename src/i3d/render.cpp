@@ -33,7 +33,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace {
@@ -205,7 +205,7 @@ void DrawQueue()
     g_vbManager.UnlockAll();
     g_ibManager.UnlockAll();
     FlushParticles();
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, TRUE);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, TRUE);
     for (int i = 0; i < g_rc.numOpaque; ++i)
         DrawItem(g_rc.items[g_rc.keys[i].index]);
     if (g_mainPass && !g_inRenderCallback)
@@ -216,7 +216,7 @@ void DrawQueue()
     }
     if (g_mainPass)
         g_renderScene->DrawWeather();
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, FALSE);
 }
 
 // A sector's visuals of this frame queued.
@@ -626,7 +626,7 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
         DWORD clear = g_driverStates[DRVSTATE_CLEAR] != 0 ? D3DCLEAR_TARGET : 0;
         if (g_driverStates[DRVSTATE_CLEAR_Z])
             clear |= clearDepth;
-        g_pDevice->Clear(0, nullptr, clear, background(), 1.0f, 0);
+        g_pGfx->Clear(0, nullptr, clear, background(), 1.0f, 0);
         if (!g_inRenderCallback)
             g_rendering = false;
         return I3DERR_GENERIC;
@@ -643,14 +643,14 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
     rc.bottom = scene->viewportBottom - rc.top;
     if (!EqualRect(&rc, reinterpret_cast<const RECT *>(&ig::g_viewport))) {
         CopyRect(reinterpret_cast<RECT *>(&ig::g_viewport), &rc);
-        if (g_pDevice->SetViewport(&ig::g_viewport) < 0) {
+        if (g_pGfx->SetViewport(&ig::g_viewport) < 0) {
             if (!g_inRenderCallback)
                 g_rendering = false;
             return I3DERR_NOTINITIALIZED;
         }
     }
     if (clear)
-        g_pDevice->Clear(0, nullptr, clear, background(), 1.0f, 0);
+        g_pGfx->Clear(0, nullptr, clear, background(), 1.0f, 0);
     // (Returns with g_rendering still set: the original's.)
     if (!g_renderCamera->sector)
         return I3DERR_GENERIC;
@@ -877,8 +877,8 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
         if (scene->backdropSector->sectorFlags & SCTF_VISIBLE) {
             g_viewProjection = &cam->backdropViewProjection;
             scene->SetScreenProjection(*g_viewProjection);
-            g_pDevice->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX *>(&cam->viewRotation));
-            g_pDevice->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->backdropProjection));
+            g_pGfx->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX *>(&cam->viewRotation));
+            g_pGfx->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->backdropProjection));
             PrepareSector(scene->backdropSector);
             ReserveKeys();
             for (int i = g_rc.items.Size(); i != 0;) {
@@ -888,20 +888,20 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
                 AddKey(static_cast<uint32_t>(-d), i);
             }
             RadixSort(g_rc.keys, g_rc.numKeys);
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, FALSE);
             DrawQueue();
             g_rc.ResetQueue();
         }
         if (g_driverStates[DRVSTATE_ZBUFFER])
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, cam->ortho ? TRUE : ig::g_zBufferType);
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, cam->ortho ? TRUE : ig::g_zBufferType);
         // The mirrors' reflections.
         if (scene->mirrors.Size() != 0) {
             g_viewProjection = &cam->viewProjection;
             bool anyVisible = false;
             scene->SetScreenProjection(*g_viewProjection);
-            g_pDevice->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX *>(&cam->viewMatrix));
-            g_pDevice->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->projection));
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
+            g_pGfx->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX *>(&cam->viewMatrix));
+            g_pGfx->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->projection));
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, TRUE);
             for (int m = 0; m < scene->mirrors.Size(); ++m) {
                 I3D_mirror *mirror = static_cast<I3D_mirror *>(scene->mirrors[m]);
                 MirrorPrepare(mirror);
@@ -914,31 +914,31 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
                 g_rs.cullDefault = D3DCULL_CW;
                 if (g_rs.cull != 1) {
                     g_rs.cull = 1;
-                    g_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+                    g_pGfx->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
                 }
                 BuildKeys();
                 RadixSort(g_rc.keys, g_rc.numKeys);
                 DrawQueue();
                 g_rc.ResetQueue();
             }
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
             g_rs.cullDefault = D3DCULL_CCW;
             if (g_rs.cull != 1) {
                 g_rs.cull = 1;
-                g_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+                g_pGfx->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
             }
             if (g_rs.cull != 3) {
                 g_rs.cull = 3;
-                g_pDevice->SetRenderState(D3DRS_CULLMODE, g_rs.cullDefault);
+                g_pGfx->SetRenderState(D3DRS_CULLMODE, g_rs.cullDefault);
             }
             if (anyVisible) {
                 // The mirror surfaces into the z buffer (those that reflect without color).
-                g_pDevice->Clear(0, nullptr, clearDepth, 0, 1.0f, 0);
-                g_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+                g_pGfx->Clear(0, nullptr, clearDepth, 0, 1.0f, 0);
+                g_pGfx->SetRenderState(D3DRS_LIGHTING, FALSE);
                 if (g_rs.alpha != 0) {
                     g_rs.alpha = 0;
-                    g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-                    g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+                    g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+                    g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
                 }
                 for (int m = 0; m < scene->mirrors.Size(); ++m) {
                     I3D_mirror *mirror = static_cast<I3D_mirror *>(scene->mirrors[m]);
@@ -949,13 +949,13 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
                         MirrorDrawSurface(mirror);
                     } else {
                         DWORD colorWrite;
-                        g_pDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &colorWrite);
-                        g_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+                        g_pGfx->GetRenderState(D3DRS_COLORWRITEENABLE, &colorWrite);
+                        g_pGfx->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
                         MirrorDrawSurface(mirror);
-                        g_pDevice->SetRenderState(D3DRS_COLORWRITEENABLE, colorWrite);
+                        g_pGfx->SetRenderState(D3DRS_COLORWRITEENABLE, colorWrite);
                     }
                 }
-                g_pDevice->SetRenderState(D3DRS_LIGHTING, TRUE);
+                g_pGfx->SetRenderState(D3DRS_LIGHTING, TRUE);
             }
         }
     }
@@ -963,10 +963,10 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
     // The main pass.
     g_viewProjection = &cam->viewProjection;
     scene->SetScreenProjection(*g_viewProjection);
-    g_pDevice->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX *>(&cam->viewMatrix));
-    g_pDevice->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->projection));
+    g_pGfx->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX *>(&cam->viewMatrix));
+    g_pGfx->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->projection));
     if (g_driverStates[DRVSTATE_ZBUFFER])
-        g_pDevice->SetRenderState(D3DRS_ZENABLE, cam->ortho ? TRUE : ig::g_zBufferType);
+        g_pGfx->SetRenderState(D3DRS_ZENABLE, cam->ortho ? TRUE : ig::g_zBufferType);
     if (g_driverStates[DRVSTATE_DRAW_VISUALS]) {
         I3D_sector *s = scene->firstSector;
         for (int n = scene->sectorCount; n != 0; --n, s = s->nextInScene) {
@@ -996,26 +996,26 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
         auto modulateStates = []() {
             if (g_rs.alphaOp[0] != D3DTOP_MODULATE) {
                 g_rs.alphaOp[0] = D3DTOP_MODULATE;
-                g_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+                g_pGfx->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
             }
             if (g_rs.colorOp[0] != D3DTOP_MODULATE) {
                 g_rs.colorOp[0] = D3DTOP_MODULATE;
-                g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+                g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
             }
             if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
                 g_rs.colorOp[1] = D3DTOP_DISABLE;
-                g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
             }
             if (g_rs.alpha != 1) {
                 g_rs.alpha = 1;
-                g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHAREF, 1);
+                g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHAREF, 1);
             }
             if (g_rs.blend != 0) {
                 g_rs.blend = 0;
-                g_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-                g_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                g_pGfx->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                g_pGfx->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
             }
         };
         modulateStates();
@@ -1034,7 +1034,7 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
         // The near sector (first-person geometry) over everything, with its own projection.
         if (scene->nearSector->firstChild && g_driverStates[DRVSTATE_DRAW_VISUALS]) {
             g_rc.ResetQueue();
-            g_pDevice->Clear(0, nullptr, clearDepth, 0, 1.0f, 0);
+            g_pGfx->Clear(0, nullptr, clearDepth, 0, 1.0f, 0);
             const uint32_t lodBits = g_driverStates[DRVSTATE_NEAR_LOD_SCALE];
             float lod;
             std::memcpy(&lod, &lodBits, 4);
@@ -1043,21 +1043,21 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
             g_fovScaleSq = g_fovScale * g_fovScale;
             g_lodScale = lod * g_fovScale;
             scene->SetScreenProjection(*g_viewProjection);
-            g_pDevice->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->nearSectorProjection));
+            g_pGfx->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->nearSectorProjection));
             PrepareSector(scene->nearSector);
             BuildKeys();
             RadixSort(g_rc.keys, g_rc.numKeys);
             DrawQueue();
             g_viewProjection = &cam->viewProjection;
             scene->SetScreenProjection(*g_viewProjection);
-            g_pDevice->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->projection));
+            g_pGfx->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX *>(&cam->projection));
             g_fovScale = 1.57079637f / cam->fov;
             g_fovScaleSq = g_fovScale * g_fovScale;
         }
 
         // The lens flares, additive, without z: those not seen fade out and leave the list.
         if (scene->lensFlares.Size() != 0) {
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, FALSE);
             const float a = cam->fov * 0.5f;
             const float b = cam->nearSectorFov * 0.5f;
             const float num = static_cast<float>(std::sin(static_cast<double>(b)) * std::cos(static_cast<double>(a)));
@@ -1065,30 +1065,30 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
             g_lensFlareScale = num / den;
             if (g_rs.colorOp[0] != D3DTOP_MODULATE) {
                 g_rs.colorOp[0] = D3DTOP_MODULATE;
-                g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+                g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
             }
             if (g_rs.alphaOp[0] != D3DTOP_MODULATE) {
                 g_rs.alphaOp[0] = D3DTOP_MODULATE;
-                g_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+                g_pGfx->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
             }
             if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
                 g_rs.colorOp[1] = D3DTOP_DISABLE;
-                g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
             }
             if (g_rs.alpha != 1) {
                 g_rs.alpha = 1;
-                g_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-                g_pDevice->SetRenderState(D3DRS_ALPHAREF, 1);
+                g_pGfx->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+                g_pGfx->SetRenderState(D3DRS_ALPHAREF, 1);
             }
             if (g_rs.blend != 1) {
                 g_rs.blend = 1;
-                g_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-                g_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+                g_pGfx->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                g_pGfx->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
             }
             if (g_rs.fog != 0) {
                 g_rs.fog = 0;
-                g_pDevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+                g_pGfx->SetRenderState(D3DRS_FOGENABLE, FALSE);
             }
             ig::SetSpecular(0);
             ig::SetZWrite(1);
@@ -1107,7 +1107,7 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
                     lens->lensFlags &= ~LENSF_SEEN;
                 }
             }
-            g_pDevice->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
+            g_pGfx->SetRenderState(D3DRS_ZENABLE, ig::g_zBufferType);
         }
         if (!g_inRenderCallback) {
             EndParticles();

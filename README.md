@@ -69,7 +69,7 @@ Requirements:
 
 ```bat
 python build.py          rem the DLL: build\msvc\LS3DF.dll (+ .pdb)
-python build.py check    rem compile every file, no link
+python build.py check    rem compile every file, no link (and check the render device boundary)
 python build.py test     rem the tests: build\compare_*.exe
 python build.py --debug  rem a debug build
 ```
@@ -111,9 +111,10 @@ first difference (exit code 1); `compare_loader ... "" all` lists every differen
 | `src/math` | the math exports |
 | `src/i3d` | the scene graph, renderer, collision, lightmaps, loaders, buffer managers |
 | `src/igraph` | IGraph, textures, image loading and conversion, the DXT encoder, IShow |
+| `src/gfx` | the render device all drawing goes through, and its Direct3D 8 backend ([docs/render_device.md](docs/render_device.md)) |
 | `src/isnd` | ISND |
 | `src/dshow` | the DirectShow base classes IShow's texture renderer is built on |
-| `src/dx` | Direct3D 8 declarations (the Windows SDK no longer has them), DXGetErrorString8 |
+| `src/dx` | Direct3D 8 declarations (the Windows SDK no longer has them): the types the renderer uses (`d3d8_types.h`), the interfaces only the backend uses (`d3d8.h`); DXGetErrorString8 |
 | `src/external` | the interfaces of `rw_data.dll`, Bink and vorbisfile |
 | `tests` | the differential tests and their fake Direct3D device |
 | `lib` | import definitions for the DLLs the engine imports |
@@ -132,8 +133,8 @@ well:
 - the tree behind MSVC 6's `std::multiset` (Dinkumware), kept because the buffer managers depend
   on its exact shape.
 
-`src/dx/d3d8.h` declares Direct3D 8 as Microsoft's SDK did; `src/external` declares the interfaces
-of Bink (RAD Game Tools), vorbisfile (Xiph.Org) and `rw_data.dll`.
+`src/dx/d3d8_types.h` and `d3d8.h` declare Direct3D 8 as Microsoft's SDK did; `src/external`
+declares the interfaces of Bink (RAD Game Tools), vorbisfile (Xiph.Org) and `rw_data.dll`.
 
 ## Disclaimer
 

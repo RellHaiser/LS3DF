@@ -34,6 +34,7 @@
 // Usage: compare_frame.exe [original LS3DF.dll] [operations] [seed]
 //
 // test-sources: src/i3d/frame.cpp src/i3d/user.cpp src/i3d/dummy.cpp src/i3d/target.cpp src/i3d/volume.cpp src/i3d/camera.cpp src/i3d/light.cpp src/i3d/sector.cpp src/i3d/portal.cpp src/i3d/occluder.cpp src/i3d/render_state.cpp src/i3d/area.cpp src/i3d/model.cpp src/i3d/anim.cpp src/i3d/visual.cpp src/i3d/driver_frames.cpp src/math/math.cpp src/core/debug.cpp
+// test-sources: src/gfx/d3d8/gfx_d3d8.cpp
 #include <windows.h>
 
 #include <float.h>
@@ -49,6 +50,7 @@
 #include <string>
 #include <vector>
 
+#include "../src/gfx/d3d8/d3d8_device.h"
 #include "../src/i3d/driver.h"
 #include "../src/i3d/frame.h"
 #include "../src/i3d/i3d_hooks.h"
@@ -138,9 +140,6 @@ I3D_RESULT __stdcall I3D_driver::ResetDevice(I3D_scene *) { return 0; }
 
 // The camera asks IGraph for the screen size: the original's IGraph serves both sides.
 IGraph *g_pIGraph;
-namespace ls3d::ig {
-IDirect3DDevice8 *g_pDevice;
-}
 
 // Each side's device: logs LightEnable.
 struct RecordingDevice : FakeDirect3DDevice8Base {

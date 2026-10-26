@@ -28,8 +28,6 @@ IGraph *g_pIGraph = nullptr;                    // 0x100d16f4
 
 namespace ls3d::ig {
 
-IDirect3D8 *g_pD3D = nullptr;
-IDirect3DDevice8 *g_pDevice = nullptr;
 S_IGraphInit g_init;
 D3DPRESENT_PARAMETERS g_presentParams;
 D3DDEVTYPE g_deviceType = D3DDEVTYPE_HAL;
@@ -148,8 +146,8 @@ IGraph::IGraph()
     g_initialized = false;
     g_mainWnd = nullptr;
     g_childWnd = nullptr;
-    g_pD3D = nullptr;
-    g_pDevice = nullptr;
+    // (The original also cleared its Direct3D pointers here; the render device holds them now, and
+    // they start null.)
     std::memset(&g_viewport, 0, sizeof g_viewport);
 
     // 0x100d1ba0: diffuse, ambient and specular white, no emissive, power 0. (D3DMATERIAL8 keeps
@@ -289,7 +287,7 @@ HRESULT __stdcall IGraph::LoadTexture(const char *fileName, const char *alphaFil
 // 0x1006a1f0
 bool __stdcall IGraph::SetTexture(ITexture *texture, int stage)
 {
-    return g_pDevice->SetTexture(stage, texture ? texture->d3dTexture : nullptr) >= 0;
+    return gfx::g_pGfx->SetTexture(stage, texture ? texture->deviceTexture : nullptr) >= 0;
 }
 
 // 0x1006a240
@@ -389,7 +387,7 @@ HRESULT __stdcall IGraph::Clear(D3DCOLOR color, float z, uint32_t flags)
         d3dFlags |= D3DCLEAR_ZBUFFER;
     if (g_caps & IGCAPS_STENCIL)
         d3dFlags |= D3DCLEAR_STENCIL;
-    return g_pDevice->Clear(0, nullptr, d3dFlags, color, z, 0);
+    return gfx::g_pGfx->Clear(0, nullptr, d3dFlags, color, z, 0);
 }
 
 namespace ls3d::ig {
@@ -397,7 +395,7 @@ namespace ls3d::ig {
 // 0x1006a710
 void ResetDeviceStates()
 {
-    IDirect3DDevice8 *dev = g_pDevice;
+    gfx::Device *dev = gfx::g_pGfx;
     dev->SetRenderState(D3DRS_AMBIENT, 0xff00ff);
     dev->SetRenderState(D3DRS_SPECULARENABLE, FALSE);
     dev->SetRenderState(D3DRS_LOCALVIEWER, FALSE);
@@ -482,7 +480,7 @@ void ResetDeviceStates()
 // 0x1006abc0
 HRESULT __stdcall IGraph::SetState(int state, int value)
 {
-    IDirect3DDevice8 *dev = g_pDevice;
+    gfx::Device *dev = gfx::g_pGfx;
     switch (state) {
     case IGS_ALPHA:
         if (g_rs.alpha == value)
@@ -623,12 +621,12 @@ int __stdcall IGraph::GetState(int state)
     case IGS_ZFUNC: return g_rs.zFunc;
     case IGS_ZWRITE: return g_rs.zWrite;
     case IGS_ZENABLE:
-        g_pDevice->GetRenderState(D3DRS_ZENABLE, &value);
+        gfx::g_pGfx->GetRenderState(D3DRS_ZENABLE, &value);
         return static_cast<int>(value);
     case IGS_FOG: return g_rs.fog;
     case IGS_SPECULAR: return g_rs.specular;
     case IGS_COLORWRITE:
-        g_pDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &value);
+        gfx::g_pGfx->GetRenderState(D3DRS_COLORWRITEENABLE, &value);
         return static_cast<int>(value);
     }
     return -1;
@@ -637,7 +635,7 @@ int __stdcall IGraph::GetState(int state)
 // 0x1006b360
 HRESULT __stdcall IGraph::SetWorldMatrix(const S_matrix *matrix)
 {
-    return g_pDevice->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX *>(matrix));
+    return gfx::g_pGfx->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX *>(matrix));
 }
 
 // 0x1006b380
@@ -646,7 +644,7 @@ HRESULT __stdcall IGraph::BeginScene()
     if (g_inScene)
         return 1;
     g_inScene = true;
-    return g_pDevice->BeginScene();
+    return gfx::g_pGfx->BeginScene();
 }
 
 // 0x1006b3b0
@@ -655,7 +653,7 @@ HRESULT __stdcall IGraph::EndScene()
     if (!g_inScene)
         return 0;
     g_inScene = false;
-    return g_pDevice->EndScene();
+    return gfx::g_pGfx->EndScene();
 }
 
 // 0x1006b3e0
@@ -669,16 +667,16 @@ HRESULT __stdcall IGraph::Flip()
             g_fps = g_fpsFrames;
             g_fpsFrames = 0;
         }
-        g_pDevice->BeginScene();
+        gfx::g_pGfx->BeginScene();
         char text[0x34];
         std::sprintf(text, "%i", g_fps);
         i3d::DrawDebugText(0x50, 0x28, text);
-        g_pDevice->EndScene();
+        gfx::g_pGfx->EndScene();
     }
     if (g_showSoundStats) {
-        g_pDevice->BeginScene();
+        gfx::g_pGfx->BeginScene();
         snd::DrawStats();
-        g_pDevice->EndScene();
+        gfx::g_pGfx->EndScene();
     }
     if (g_init.flags & IG_TEXTURE_THREAD) {
         EnterCriticalSection(&g_textureLock);
@@ -686,13 +684,13 @@ HRESULT __stdcall IGraph::Flip()
         LeaveCriticalSection(&g_textureLock);
     }
     Sleep(0);
-    HRESULT hr = g_pDevice->Present(nullptr, nullptr, nullptr, nullptr);
+    HRESULT hr = gfx::g_pGfx->Present();
     if (hr == D3DERR_DEVICELOST) {
         if (IsMouseInit()) {
             CloseMouse();
             dbgPrintf("DEVICE LOST - 0");
         }
-        if (!g_inactive && g_pDevice->TestCooperativeLevel() == D3DERR_DEVICENOTRESET) {
+        if (!g_inactive && gfx::g_pGfx->TestCooperativeLevel() == D3DERR_DEVICENOTRESET) {
             dbgPrintf("DEVICE LOST - 1");
             if (RestoreDevice(true) >= 0 && (g_init.flags & IG_TEXTURE_THREAD))
                 tex::StreamInit(g_init.flags);
@@ -726,21 +724,21 @@ static bool SelectVertexFormat(int format, UINT *stride)
     case IGV_COLOR_TEX:
         if (g_rs.vertexShader != 2) {
             g_rs.vertexShader = 2;
-            g_pDevice->SetVertexShader(g_vsColorTex1);
+            gfx::g_pGfx->SetVertexShader(g_vsColorTex1);
         }
         *stride = 0x18;
         return true;
     case IGV_TRANSFORMED:
         if (g_rs.vertexShader != 6) {
             g_rs.vertexShader = 6;
-            g_pDevice->SetVertexShader(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1);
+            gfx::g_pGfx->SetVertexShader(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1);
         }
         *stride = 0x20;
         return true;
     case IGV_TRANSFORMED_TEX2:
         if (g_rs.vertexShader != 7) {
             g_rs.vertexShader = 7;
-            g_pDevice->SetVertexShader(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX2);
+            gfx::g_pGfx->SetVertexShader(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX2);
         }
         *stride = 0x28;
         return true;
@@ -757,7 +755,7 @@ HRESULT __stdcall IGraph::DrawPrimitive(int kind, int count, const void *vertice
     UINT stride;
     if (!PrimitiveType(kind, &type) || !SelectVertexFormat(vertexFormat, &stride))
         return I3DERR_INVALIDPARAMS;
-    return g_pDevice->DrawPrimitiveUP(type, count, vertices, stride) < 0 ? I3DERR_GENERIC : 0;
+    return gfx::g_pGfx->DrawPrimitiveUP(type, count, vertices, stride) < 0 ? I3DERR_GENERIC : 0;
 }
 
 // 0x1006b6e0
@@ -770,8 +768,8 @@ HRESULT __stdcall IGraph::DrawIndexedPrimitive(int kind, int numVertices, const 
     UINT stride;
     if (!PrimitiveType(kind, &type) || !SelectVertexFormat(vertexFormat, &stride))
         return I3DERR_INVALIDPARAMS;
-    return g_pDevice->DrawIndexedPrimitiveUP(type, 0, numVertices, count, indices, D3DFMT_INDEX16, vertices,
-                                             stride) < 0
+    return gfx::g_pGfx->DrawIndexedPrimitiveUP(type, 0, numVertices, count, indices, D3DFMT_INDEX16, vertices,
+                                               stride) < 0
                ? I3DERR_GENERIC
                : 0;
 }
@@ -830,7 +828,7 @@ static LRESULT CALLBACK IGraphWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         } else if (reactivate) {
             g_pIGraph->SetAppName(g_savedAppName);
             g_inactive = false;
-            if (g_pDevice)
+            if (gfx::g_pGfx->HasDevice())
                 i3d::ReapplyDriverStates();
             // The players' volume is lost with the focus.
             for (int i = g_shows.Size(); i--;) {
@@ -908,9 +906,9 @@ static HRESULT ChooseDepthFormat()
     const D3DFORMAT *list = g_bitDepth == 16 ? kDepthFormats16 : kDepthFormats32;
     const D3DFORMAT display = g_presentParams.BackBufferFormat;
     for (int i = 4; i--;) {
-        if (g_pD3D->CheckDeviceFormat(g_init.adapter, g_deviceType, display, D3DUSAGE_DEPTHSTENCIL,
-                                      D3DRTYPE_SURFACE, list[i]) >= 0 &&
-            g_pD3D->CheckDepthStencilMatch(g_init.adapter, g_deviceType, display, display, list[i]) >= 0) {
+        if (gfx::g_pGfx->CheckDeviceFormat(g_init.adapter, g_deviceType, display, D3DUSAGE_DEPTHSTENCIL,
+                                           D3DRTYPE_SURFACE, list[i]) >= 0 &&
+            gfx::g_pGfx->CheckDepthStencilMatch(g_init.adapter, g_deviceType, display, display, list[i]) >= 0) {
             g_presentParams.AutoDepthStencilFormat = list[i];
             break;
         }
@@ -950,19 +948,19 @@ HRESULT RestoreDevice(bool reset)
         if (!(g_init.flags & IG_FULLSCREEN)) {
             // The desktop format may have changed while the device was lost.
             D3DDISPLAYMODE mode;
-            g_pD3D->GetAdapterDisplayMode(g_init.adapter, &mode);
+            gfx::g_pGfx->GetAdapterDisplayMode(g_init.adapter, &mode);
             g_presentParams.BackBufferFormat = mode.Format;
             SetBitDepthFromFormat(mode.Format);
             const HRESULT hr = ChooseDepthFormat();
             if (hr < 0)
                 return hr;
         }
-        const HRESULT hr = g_pDevice->Reset(&g_presentParams);
+        const HRESULT hr = gfx::g_pGfx->Reset(&g_presentParams);
         if (hr < 0) {
             LogDxError(hr, 0x7af);
             return I3DERR_GENERIC;
         }
-        if (g_pDevice)
+        if (gfx::g_pGfx->HasDevice())
             i3d::ReapplyDriverStates();
         i3d::InvalidateLights();
         i3d::InitParticleBuffers();
@@ -1006,7 +1004,7 @@ HRESULT RestoreDevice(bool reset)
     for (const Shader &s : shaders) {
         const DWORD usage = s.function ? ((g_caps & IGCAPS_HW_VERTEX_SHADERS) ? 0 : D3DUSAGE_SOFTWAREPROCESSING)
                                        : swUsage;
-        const HRESULT hr = g_pDevice->CreateVertexShader(s.decl, s.function, s.handle, usage);
+        const HRESULT hr = gfx::g_pGfx->CreateVertexShader(s.decl, s.function, s.handle, usage);
         if (hr < 0) {
             LogDxError(hr, s.line);
             return I3DERR_GENERIC;
@@ -1021,7 +1019,7 @@ HRESULT RestoreDevice(bool reset)
 HRESULT __stdcall IGraph::SetViewport(const S_IGraphViewport *viewport)
 {
     std::memcpy(&g_viewport, viewport, sizeof g_viewport);
-    return g_pDevice->SetViewport(&g_viewport) < 0 ? I3DERR_GENERIC : 0;
+    return gfx::g_pGfx->SetViewport(&g_viewport) < 0 ? I3DERR_GENERIC : 0;
 }
 
 // 0x1006c2b0
@@ -1060,15 +1058,13 @@ static bool Find16BitTextureFormat(D3DFORMAT display)
 {
     static const D3DFORMAT kFormats[] = {D3DFMT_R5G6B5, D3DFMT_X1R5G5B5, D3DFMT_A1R5G5B5};
     for (D3DFORMAT f : kFormats) {
-        if (g_pD3D->CheckDeviceFormat(g_init.adapter, g_deviceType, display, 0, D3DRTYPE_TEXTURE, f) >= 0) {
+        if (gfx::g_pGfx->CheckDeviceFormat(g_init.adapter, g_deviceType, display, 0, D3DRTYPE_TEXTURE, f) >= 0) {
             g_fmt16Bit = f;
             return true;
         }
     }
     return false;
 }
-
-using Direct3DCreate8Fn = IDirect3D8 *(__stdcall *)(UINT);
 
 // 0x1006c2d0
 HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
@@ -1148,21 +1144,15 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     }
     SetFocus(g_mainWnd);
 
-    // The original links d3d8.lib; the port binds Direct3DCreate8 at run time (the SDK has no
-    // Direct3D 8 import library any more).
-    if (HMODULE d3d8 = LoadLibraryA("d3d8.dll")) {
-        if (auto create = reinterpret_cast<Direct3DCreate8Fn>(GetProcAddress(d3d8, "Direct3DCreate8")))
-            g_pD3D = create(D3D_SDK_VERSION);
-    }
-    if (!g_pD3D) {
+    if (!gfx::g_pGfx->Open()) {
         dbgPrintf("IGraph::Init() - Error create D3D8 object !!");
         return I3DERR_GENERIC;
     }
 
     // Display modes without refresh rates, newest enumeration index first; and their formats.
-    for (UINT i = g_pD3D->GetAdapterModeCount(g_init.adapter); i--;) {
+    for (UINT i = gfx::g_pGfx->GetAdapterModeCount(g_init.adapter); i--;) {
         D3DDISPLAYMODE mode;
-        g_pD3D->EnumAdapterModes(g_init.adapter, i, &mode);
+        gfx::g_pGfx->EnumAdapterModes(g_init.adapter, i, &mode);
         bool known = false;
         for (int k = g_displayModes.Size(); k--;) {
             const D3DDISPLAYMODE &m = g_displayModes[k];
@@ -1223,13 +1213,13 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     }
 
     D3DDISPLAYMODE desktop;
-    HRESULT hr = g_pD3D->GetAdapterDisplayMode(g_init.adapter, &desktop);
+    HRESULT hr = gfx::g_pGfx->GetAdapterDisplayMode(g_init.adapter, &desktop);
     if (hr < 0) {
         LogDxError(hr, 0x9a7);
         return I3DERR_GENERIC;
     }
     D3DADAPTER_IDENTIFIER8 id;
-    hr = g_pD3D->GetAdapterIdentifier(g_init.adapter, D3DENUM_NO_WHQL_LEVEL, &id);
+    hr = gfx::g_pGfx->GetAdapterIdentifier(g_init.adapter, D3DENUM_NO_WHQL_LEVEL, &id);
     if (hr < 0) {
         LogDxError(hr, 0x9ab);
         return I3DERR_GENERIC;
@@ -1249,7 +1239,7 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     dbgPrintf("");
 
     D3DCAPS8 caps;
-    hr = g_pD3D->GetDeviceCaps(g_init.adapter, g_deviceType, &caps);
+    hr = gfx::g_pGfx->GetDeviceCaps(g_init.adapter, g_deviceType, &caps);
     if (hr < 0) {
         LogDxError(hr, 0x9c5);
         return I3DERR_GENERIC;
@@ -1346,8 +1336,8 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
                 dbgPrintf("Trying to use 4 samples Full Scene AntiAliasing ...");
             samples = D3DMULTISAMPLE_4_SAMPLES;
         }
-        if (g_pD3D->CheckDeviceMultiSampleType(g_init.adapter, D3DDEVTYPE_HAL, g_presentParams.BackBufferFormat,
-                                               g_presentParams.Windowed, samples) < 0) {
+        if (gfx::g_pGfx->CheckDeviceMultiSampleType(g_init.adapter, D3DDEVTYPE_HAL, g_presentParams.BackBufferFormat,
+                                                    g_presentParams.Windowed, samples) < 0) {
             if (g_init.flags & IG_VERBOSE)
                 dbgPrintf("ERROR... cannot use FSAA with current backbuffer format !\n");
             g_init.flags &= ~(IG_FSAA2 | IG_FSAA4);
@@ -1378,27 +1368,27 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     // float results depend on. With hardware T&L the device is MIXED ((caps & 1 ? 0x60 : 0) +
     // 0x20): the engine's index and vertex buffers are all D3DUSAGE_SOFTWAREPROCESSING, which a
     // HARDWARE_VERTEXPROCESSING device refuses (D3DERR_INVALIDCALL).
-    hr = g_pD3D->CreateDevice(g_init.adapter, g_deviceType, g_mainWnd,
-                              ((g_caps & IGCAPS_HW_TNL) ? D3DCREATE_MIXED_VERTEXPROCESSING
-                                                        : D3DCREATE_SOFTWARE_VERTEXPROCESSING) |
-                                  D3DCREATE_MULTITHREADED,
-                              &g_presentParams, &g_pDevice);
+    hr = gfx::g_pGfx->CreateDevice(g_init.adapter, g_deviceType, g_mainWnd,
+                                   ((g_caps & IGCAPS_HW_TNL) ? D3DCREATE_MIXED_VERTEXPROCESSING
+                                                             : D3DCREATE_SOFTWARE_VERTEXPROCESSING) |
+                                       D3DCREATE_MULTITHREADED,
+                                   &g_presentParams);
     if (hr < 0) {
         LogDxError(hr, 0xb28);
         return I3DERR_GENERIC;
     }
     for (DWORD stage = 0; stage < 2; ++stage) {
-        g_pDevice->SetTextureStageState(stage, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
-        g_pDevice->SetTextureStageState(stage, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
-        g_pDevice->SetTextureStageState(stage, D3DTSS_MIPFILTER, D3DTEXF_POINT);
+        gfx::g_pGfx->SetTextureStageState(stage, D3DTSS_MINFILTER, D3DTEXF_LINEAR);
+        gfx::g_pGfx->SetTextureStageState(stage, D3DTSS_MAGFILTER, D3DTEXF_LINEAR);
+        gfx::g_pGfx->SetTextureStageState(stage, D3DTSS_MIPFILTER, D3DTEXF_POINT);
     }
-    g_pDevice->SetRenderState(D3DRS_DITHERENABLE, TRUE);
-    g_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+    gfx::g_pGfx->SetRenderState(D3DRS_DITHERENABLE, TRUE);
+    gfx::g_pGfx->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
     if (g_init.flags & (IG_FSAA2 | IG_FSAA4))
-        g_pDevice->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
+        gfx::g_pGfx->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
     if (!(g_caps & IGCAPS_HW_TNL))
-        g_pDevice->SetRenderState(D3DRS_SOFTWAREVERTEXPROCESSING, TRUE);
-    g_pDevice->SetTextureStageState(0, D3DTSS_MAXANISOTROPY, 0);
+        gfx::g_pGfx->SetRenderState(D3DRS_SOFTWAREVERTEXPROCESSING, TRUE);
+    gfx::g_pGfx->SetTextureStageState(0, D3DTSS_MAXANISOTROPY, 0);
     // (Port enhancement, LS3DF.ini AnisotropicFiltering: linear minification is anisotropic, up to
     // the option's degree or the device's. I3D_driver::SetState(0) applies it after a reset.)
     g_anisotropy = 0;
@@ -1408,16 +1398,16 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
             g_anisotropy = want < most ? want : most;
         if (g_anisotropy) {
             for (DWORD stage = 0; stage < 3; ++stage) {
-                g_pDevice->SetTextureStageState(stage, D3DTSS_MAXANISOTROPY, static_cast<DWORD>(g_anisotropy));
+                gfx::g_pGfx->SetTextureStageState(stage, D3DTSS_MAXANISOTROPY, static_cast<DWORD>(g_anisotropy));
                 if (stage < 2)
-                    g_pDevice->SetTextureStageState(stage, D3DTSS_MINFILTER, D3DTEXF_ANISOTROPIC);
+                    gfx::g_pGfx->SetTextureStageState(stage, D3DTSS_MINFILTER, D3DTEXF_ANISOTROPIC);
             }
         }
     }
-    g_pDevice->SetRenderState(D3DRS_ALPHAREF, g_rs.alphaRef);
+    gfx::g_pGfx->SetRenderState(D3DRS_ALPHAREF, g_rs.alphaRef);
     RestoreDevice(false);
 
-    hr = g_pD3D->GetAdapterDisplayMode(g_init.adapter, &desktop);
+    hr = gfx::g_pGfx->GetAdapterDisplayMode(g_init.adapter, &desktop);
     if (hr < 0) {
         LogDxError(hr, 0xb4c);
         return I3DERR_GENERIC;
@@ -1432,7 +1422,7 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     // Texture formats, checked against the desktop format.
     const D3DFORMAT display = desktop.Format;
     auto supported = [&](D3DFORMAT f) {
-        return g_pD3D->CheckDeviceFormat(g_init.adapter, g_deviceType, display, 0, D3DRTYPE_TEXTURE, f) >= 0;
+        return gfx::g_pGfx->CheckDeviceFormat(g_init.adapter, g_deviceType, display, 0, D3DRTYPE_TEXTURE, f) >= 0;
     };
     if (!Find16BitTextureFormat(display))
         dbgPrintf("IGraph::Init() - Error. Useful 16bit texture format not found !!");
@@ -1474,7 +1464,7 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
         g_fmtBump = D3DFMT_V8U8;
     }
     auto nameOrNone = [&](D3DFORMAT f) { return GetFormatName(f > 0 ? f : static_cast<D3DFORMAT>(-1)); };
-    dbgPrintf("\nMaximum available texture memory ( AGP + VRAM ): %i MB", g_pDevice->GetAvailableTextureMem() >> 20);
+    dbgPrintf("\nMaximum available texture memory ( AGP + VRAM ): %i MB", gfx::g_pGfx->GetAvailableTextureMem() >> 20);
     dbgPrintf("\nUsing texture formats:");
     dbgPrintf("   16bit textures: %s", GetFormatName(g_fmt16Bit));
     dbgPrintf("   1bit Alpha textures: %s", GetFormatName(g_fmt1BitAlpha));
@@ -1664,18 +1654,16 @@ HRESULT __stdcall IGraph::Close()
     g_maxTextureWidth = 0;
     g_maxTextureHeight = 0;
     ReleaseDirectInput();
-    if (g_pDevice) {
+    if (gfx::g_pGfx->HasDevice()) {
         if (g_init.flags & IG_TEXTURE_THREAD) {
             TerminateThread(g_textureThread, 0);
             tex::StreamFlush();
         }
         g_textureThread = nullptr;
-        g_pDevice->Release();
-        g_pDevice = nullptr;
+        gfx::g_pGfx->ReleaseDevice();
     }
-    if (g_pD3D) {
-        g_pD3D->Release();
-        g_pD3D = nullptr;
+    if (gfx::g_pGfx->IsOpen()) {
+        gfx::g_pGfx->Close();
         CoUninitialize();
     }
     g_initialized = false;
@@ -1755,8 +1743,8 @@ bool __stdcall IGraph::SetGammaRamp(const uint16_t *ramp, bool calibrate)
 {
     if (!(g_caps & IGCAPS_GAMMA))
         return false;
-    g_pDevice->SetGammaRamp(calibrate ? D3DSGR_CALIBRATE : D3DSGR_NO_CALIBRATION,
-                            reinterpret_cast<const D3DGAMMARAMP *>(ramp));
+    gfx::g_pGfx->SetGammaRamp(calibrate ? D3DSGR_CALIBRATE : D3DSGR_NO_CALIBRATION,
+                              reinterpret_cast<const D3DGAMMARAMP *>(ramp));
     return true;
 }
 
@@ -1765,7 +1753,7 @@ bool __stdcall IGraph::GetGammaRamp(uint16_t *ramp)
 {
     if (!(g_caps & IGCAPS_GAMMA))
         return false;
-    g_pDevice->GetGammaRamp(reinterpret_cast<D3DGAMMARAMP *>(ramp));
+    gfx::g_pGfx->GetGammaRamp(reinterpret_cast<D3DGAMMARAMP *>(ramp));
     if (g_caps & IGCAPS_GAMMA_8BIT) {
         for (int i = 0x300; i--;)
             ramp[i] = static_cast<uint16_t>(ramp[i] << 8 | ramp[i]);

@@ -24,6 +24,7 @@
 // Usage: compare_mesh.exe [original LS3DF.dll] [operations] [seed]
 //
 // test-sources: src/i3d/mesh.cpp src/i3d/material.cpp src/i3d/ib_manager.cpp src/i3d/vb_manager.cpp src/i3d/driver_factories.cpp src/i3d/anim.cpp src/math/math.cpp src/core/debug.cpp src/dx/dxerr8.cpp
+// test-sources: src/gfx/d3d8/gfx_d3d8.cpp
 #include <float.h>
 
 #include <algorithm>
@@ -50,9 +51,6 @@ int g_loadFile;
 int g_driverTime;
 I3D_RESULT OpenAnimationFile(const char *, I3D_animation_set *) { return I3DERR_NOFILE; }
 }  // namespace ls3d::i3d
-namespace ls3d::ig {
-IDirect3DDevice8 *g_pDevice;
-}
 IGraph *g_pIGraph;
 
 I3D_driver::I3D_driver() : unknown04(0), mirrorStamp(0) {}

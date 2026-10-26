@@ -11,7 +11,7 @@
 #include <windows.h>
 
 #include "core/debug.h"
-#include "dx/d3d8.h"
+#include "dx/d3d8_types.h"
 
 struct S_matrix;
 class ITexture;

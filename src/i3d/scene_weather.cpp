@@ -18,7 +18,7 @@
 
 using namespace ls3d;
 using namespace ls3d::i3d;
-using ig::g_pDevice;
+using gfx::g_pGfx;
 using ig::g_rs;
 
 namespace {
@@ -284,30 +284,30 @@ void I3D_scene::DrawWeather()
     }
     if (g_rs.colorOp[0] != D3DTOP_MODULATE2X) {
         g_rs.colorOp[0] = D3DTOP_MODULATE2X;
-        g_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE2X);
+        g_pGfx->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE2X);
     }
     if (g_rs.alphaOp[0] != D3DTOP_MODULATE) {
         g_rs.alphaOp[0] = D3DTOP_MODULATE;
-        g_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+        g_pGfx->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
     }
     if (g_rs.colorOp[1] != D3DTOP_DISABLE) {
         g_rs.colorOp[1] = D3DTOP_DISABLE;
-        g_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        g_pGfx->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
     }
     SetAlphaState(1);
     SetBlendState(0);
     ITexture *texture = ((weatherFlags & WEATHER_SNOW) && g_snowTexture) ? g_snowTexture : ig::g_defaultTexture;
-    g_pDevice->SetTexture(0, texture->d3dTexture);
+    g_pGfx->SetTexture(0, texture->deviceTexture);
     ig::SetZWrite(0);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, FALSE);
     if (g_rs.cull != 1) {
         g_rs.cull = 1;
-        g_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        g_pGfx->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
     }
     g_pIGraph->SetWorldMatrix(&kIdentity);
     SetVertexFormat(2);
-    g_pDevice->SetIndices(g_weatherIB.ib, g_weatherVB.offset);
-    g_pDevice->SetStreamSource(0, g_weatherVB.vb, 0x18);
-    g_pDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, g_weatherDrawn * 5, g_weatherIB.offset, g_weatherDrawn * 4);
-    g_pDevice->SetRenderState(D3DRS_LIGHTING, TRUE);
+    g_pGfx->SetIndices(g_weatherIB.ib, g_weatherVB.offset);
+    g_pGfx->SetStreamSource(0, g_weatherVB.vb, 0x18);
+    g_pGfx->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, g_weatherDrawn * 5, g_weatherIB.offset, g_weatherDrawn * 4);
+    g_pGfx->SetRenderState(D3DRS_LIGHTING, TRUE);
 }
