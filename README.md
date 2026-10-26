@@ -38,6 +38,7 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 | The DXT (S3TC) encoder | `compare_s3tc`: 23,000 images, 373,000 blocks |
 | Sound driver, sounds, 3D sounds, listener, voice manager | `compare_isnd`: 1,000,000 operations on fake DirectSound objects |
 | IGraph's keyboard, mouse and timer | `compare_input`: 400,000 operations on fake DirectInput objects |
+| IGraph's window procedure and message loop | `compare_window`: 400,000 operations on hidden test windows |
 | Frames, lights, cameras, sectors, portals, occluders, areas, models, animation | `compare_frame`: 800,000 random operations |
 | Materials | `compare_material`: 800,000 operations |
 | Vertex / index buffer managers | `compare_buffers`: 400,000 operations, node for node |
@@ -45,7 +46,7 @@ The companion port of `rw_data.dll`, the game's data-file layer, is at
 | Collision queries (rays, picking, moving spheres) | `compare_collision`: 2,000,000 random queries and scene changes |
 | The lightmap baker | `compare_lightmap`: 20,000 rounds of bakes and light probes |
 | Model, scene, animation and shadow loading | `compare_loader`: all 6,200 of the game's files plus 14 synthetic ones, member by member |
-| The renderer, IGraph's device and window, IShow, ISND start-up | compiles and links only |
+| The renderer, IGraph's device and window creation, IShow, ISND start-up | compiles and links only |
 
 The tests are described [below](#tests); each one's header says what it compares and what it
 leaves out.
@@ -115,6 +116,7 @@ first difference (exit code 1); `compare_loader ... "" all` lists every differen
 | `src/gfx` | the render device all drawing goes through, and its Direct3D 8 backend ([docs/render_device.md](docs/render_device.md)) |
 | `src/audio` | the sound device all sound goes through, and its DirectSound backend ([docs/sound_device.md](docs/sound_device.md)) |
 | `src/input` | the input device IGraph reads the keyboard and mouse through, and its DirectInput backend ([docs/input_device.md](docs/input_device.md)) |
+| `src/platform` | the window and its messages, the cursor, time, threads and locks, and their Win32 implementation ([docs/platform.md](docs/platform.md)) |
 | `src/isnd` | ISND |
 | `src/dshow` | the DirectShow base classes IShow's texture renderer is built on |
 | `src/dx` | Direct3D 8 declarations (the Windows SDK no longer has them): the types the renderer uses (`d3d8_types.h`), the interfaces only the backend uses (`d3d8.h`); DirectSound's and DirectInput's types (`dsound_types.h`, `dinput_types.h`); DXGetErrorString8 |

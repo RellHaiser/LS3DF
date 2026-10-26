@@ -8,6 +8,7 @@
 //
 // test-sources: src/isnd/*.cpp src/core/debug.cpp
 // test-sources: src/audio/dsound/audio_dsound.cpp
+// test-sources: src/platform/win32/platform_win32.cpp
 #include <windows.h>
 
 #include <float.h>

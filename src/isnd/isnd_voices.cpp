@@ -3,10 +3,9 @@
 
 #include <cstdio>
 
-#include <mmsystem.h>
-
 #include "core/fpu.h"
 #include "i3d/i3d_links.h"
+#include "platform/platform.h"
 
 namespace ls3d::snd {
 
@@ -54,7 +53,7 @@ void UpdateVoices()
 {
     if (g_maxVoices == 0)
         return;
-    const uint32_t now = timeGetTime();
+    const uint32_t now = platform::Milliseconds();
 
     // Voices of one-shot sounds that have played to their end are released.
     for (int i = g_voices.Size(); i != 0;) {
@@ -134,7 +133,7 @@ void DrawStats()
     for (int i = 0; i < g_voices.Size(); ++i) {
         const S_voice &voice = g_voices[i];
         // (The pause time is measured with GetTickCount here, timeGetTime everywhere else.)
-        const uint32_t paused = voice.pauseTime ? GetTickCount() - voice.pauseTime : 0;
+        const uint32_t paused = voice.pauseTime ? platform::TickCount() - voice.pauseTime : 0;
         ISND_sound *sound = voice.sound;
         const float frequency = sound->frequency;
         const float volume = sound->volume;

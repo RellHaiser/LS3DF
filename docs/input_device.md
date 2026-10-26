@@ -27,8 +27,8 @@ backend's handles are the DirectInput interfaces.
 state and new presses, key repeat (350 ms, then every 34 ms), the modifier queries, the key map,
 the character table, the debug overlay keys (Ctrl+Alt+Shift+F10 to F12), the mouse's absolute
 position in exclusive mode, swapped buttons and the timer. The window-message keyboard
-(`IGKEY_WINDOW_MESSAGES`, from `WM_KEYDOWN` / `WM_CHAR`) belongs to the window, which the next seam
-covers.
+(`IGKEY_WINDOW_MESSAGES`, from `WM_KEYDOWN` / `WM_CHAR`) belongs to the window: the
+[platform](platform.md) turns the messages into keys, and `compare_window` tests it.
 
 **The boundary is checked.** `python build.py` (and `check`) fails when code outside `src/dx` and
 `src/input/dinput` includes `dinput.h` or the backend, or names a DirectInput interface or
@@ -58,5 +58,5 @@ The test found one real difference in the port, now fixed. The held key of `IGKE
 as key 0 in the original (a zero-initialised variable), so its first `GetKey` in repeat mode
 returns 0; the port started at -1.
 
-Not covered: `DirectInput8Create` itself, the window-message keyboard, and `SetMousePos` in
-absolute mode (it moves the real cursor).
+Not covered: `DirectInput8Create` itself, and `SetMousePos` in absolute mode (it moves the real
+cursor). The window-message keyboard is `compare_window`'s ([platform](platform.md)).

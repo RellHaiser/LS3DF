@@ -7,6 +7,7 @@
 #include "igraph/igraph.h"
 #include "igraph/igraph_state.h"
 #include "input/input.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::ig;
@@ -138,44 +139,12 @@ void QueueChar(int ch)
     }
 }
 
-// ProcessWinMessages with IGKEY_WINDOW_MESSAGES: arrows and delete from WM_KEYDOWN, the rest
-// from WM_CHAR (DirectInput codes).
-void KeyFromMessage(const MSG &msg)
+// ProcessWinMessages with IGKEY_WINDOW_MESSAGES: the platform turns the window's key messages into
+// DirectInput codes (platform/win32).
+void KeyMessage(int key, int ch)
 {
-    if (msg.message == WM_KEYDOWN) {
-        switch (msg.wParam) {
-        case VK_LEFT: g_messageKey = DIK_LEFT; g_messageChar = 0; break;
-        case VK_UP: g_messageKey = DIK_UP; g_messageChar = 0; break;
-        case VK_RIGHT: g_messageKey = DIK_RIGHT; g_messageChar = 0; break;
-        case VK_DOWN: g_messageKey = DIK_DOWN; g_messageChar = 0; break;
-        case VK_DELETE: g_messageKey = DIK_DELETE; g_messageChar = 0; break;
-        }
-    } else if (msg.message == WM_CHAR && static_cast<LONG>(msg.lParam) >= 0) {
-        switch (msg.wParam) {
-        case 8:
-            g_messageKey = DIK_BACK;
-            g_messageChar = 8;
-            break;
-        case 9:
-            g_messageKey = DIK_TAB;
-            g_messageChar = 9;
-            break;
-        case 0x1b:
-            g_messageKey = DIK_ESCAPE;
-            g_messageChar = 0x1b;
-            break;
-        default: {
-            const SHORT vk = VkKeyScanA(static_cast<CHAR>(msg.wParam));
-            if (vk == -1) {
-                g_messageKey = 0;
-                g_messageChar = 0;
-            } else {
-                g_messageKey = static_cast<int>(MapVirtualKeyA(vk & 0xff, 0));
-                g_messageChar = static_cast<int>(msg.wParam);
-            }
-        }
-        }
-    }
+    g_messageKey = key;
+    g_messageChar = ch;
 }
 
 }  // namespace ls3d::ig
@@ -290,7 +259,7 @@ int __stdcall IGraph::GetKey()
             g_lastKeyChar = KeyToChar(key, GetShiftKeys(false) & (IGSHIFT_SHIFT | IGSHIFT_CTRL | IGSHIFT_ALT));
             if (g_keyboardFlags & IGKEY_REPEAT) {
                 g_repeatKey = key;
-                g_repeatStart = timeGetTime();
+                g_repeatStart = platform::Milliseconds();
                 g_repeatLast = 0;
             }
             return key;
@@ -301,7 +270,7 @@ int __stdcall IGraph::GetKey()
                 g_repeatKey = -1;
                 return 0;
             }
-            const DWORD now = timeGetTime();
+            const DWORD now = platform::Milliseconds();
             const bool due = g_repeatLast ? static_cast<int>(now - g_repeatLast) > 34
                                           : static_cast<int>(now - g_repeatStart) > 350;
             if (due) {
@@ -526,22 +495,14 @@ int __stdcall IGraph::SetMousePos(int x, int y)
     if (g_mouseMode != 0)
         return g_mouseMode;
     if (!(g_init.flags & IG_FULLSCREEN)) {
-        RECT rc;
-        if (g_init.flags & IG_CHILD_WINDOW) {
-            GetWindowRect(g_childWnd, &rc);
-        } else {
-            GetWindowRect(g_mainWnd, &rc);
-            const int frameX = GetSystemMetrics(SM_CXFIXEDFRAME);
-            const int frameY = GetSystemMetrics(SM_CYFIXEDFRAME);
-            const int caption = GetSystemMetrics(SM_CYCAPTION);
-            const int menu = (g_init.flags & IG_MENU) ? GetSystemMetrics(SM_CYMENU) : 0;
-            rc.left += frameX;
-            rc.top += menu + caption + frameY;
-        }
-        x += rc.left;
-        y += rc.top;
+        // The client area's top left: the child window's own, the main window's after its frame.
+        const bool child = (g_init.flags & IG_CHILD_WINDOW) != 0;
+        const bool withMenu = (g_init.flags & IG_MENU) != 0;
+        const POINT origin = platform::ClientOrigin(child ? g_childWnd : g_mainWnd, !child, withMenu);
+        x += origin.x;
+        y += origin.y;
     }
-    return SetCursorPos(x, y);
+    return platform::SetCursorPosition(x, y);
 }
 
 // 0x1006fb10
@@ -574,7 +535,7 @@ uint32_t __stdcall IGraph::GetMouseButtons()
 // 0x1006fb70
 DWORD __stdcall IGraph::ReadTimer()
 {
-    g_lastTime = timeGetTime();
+    g_lastTime = platform::Milliseconds();
     return g_lastTime;
 }
 
@@ -585,7 +546,7 @@ DWORD __stdcall IGraph::GetTimer(DWORD minMs, DWORD maxMs)
     ReadTimer();
     const DWORD elapsed = g_lastTime - before;
     if (elapsed < minMs) {
-        Sleep(minMs - elapsed);
+        platform::Pause(minMs - elapsed);
         g_lastTime += minMs - elapsed;
         return minMs;
     }

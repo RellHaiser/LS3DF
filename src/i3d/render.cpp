@@ -1,7 +1,6 @@
 // I3D_driver::Render (0x1005edc0) and the render core: the queue's sorts (0x1005e770, 0x10062620),
 // RenderVisual (0x100632a0) and the device reset pass (0x100633b0, 0x10063560).
 #include <windows.h>
-#include <mmsystem.h>
 
 #include <cmath>
 #include <cstring>
@@ -30,6 +29,7 @@
 #include "igraph/igraph.h"
 #include "igraph/igraph_state.h"
 #include "isnd/isnd.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::i3d;
@@ -566,7 +566,7 @@ void RenderVisual(I3D_visual *visual)
         ++lens->refCount;
         list.PushBack(lens);
         lens->testTime = 0;
-        lens->updateTime = timeGetTime();
+        lens->updateTime = platform::Milliseconds();
     }
     lens->lensFlags |= LENSF_SEEN;
 }
@@ -689,7 +689,7 @@ I3D_RESULT I3D_driver::Render(I3D_scene *scene, bool keepScene)
         }
     }
     if (soundPass) {
-        const DWORD now = timeGetTime();
+        const DWORD now = platform::Milliseconds();
         // The areas the camera is in; the sounds of those it is not in are to leave.
         if (scene->firstArea) {
             const S_vector4 camPos = *reinterpret_cast<const S_vector4 *>(&cam->GetMatrix()(3));

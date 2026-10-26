@@ -6,8 +6,6 @@
 #include <initializer_list>
 #include <new>
 
-#include <mmsystem.h>
-
 #include "core/debug.h"
 #include "i3d/anim.h"
 #include "i3d/camera.h"
@@ -24,6 +22,7 @@
 #include "igraph/itexture.h"
 #include "isnd/eax.h"
 #include "isnd/isnd.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::i3d;
@@ -1156,9 +1155,9 @@ void I3D_scene::SetSoundEnvironment(I3D_sector *sector, I3D_sector *previous, fl
     if (!(g_sndDriver->flags & 0x10)) {
         if (!g_lastEnvironmentTimeSet) {
             g_lastEnvironmentTimeSet = true;
-            g_lastEnvironmentTime = timeGetTime();
+            g_lastEnvironmentTime = platform::Milliseconds();
         }
-        const DWORD time = timeGetTime();
+        const DWORD time = platform::Milliseconds();
         if (now || time - g_lastEnvironmentTime > 100) {
             auto f = [&](int k) {
                 float v;

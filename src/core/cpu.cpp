@@ -5,7 +5,8 @@
 #include <intrin.h>
 
 #include <windows.h>
-#include <mmsystem.h>
+
+#include "platform/platform.h"
 
 namespace ls3d {
 
@@ -112,16 +113,16 @@ uint32_t DetectCpu(S_cpuInfo *info)
 
 uint32_t MeasureCpuMhz()
 {
-    DWORD t0 = timeGetTime(), t1;
+    DWORD t0 = platform::Milliseconds(), t1;
     do
-        t1 = timeGetTime();
+        t1 = platform::Milliseconds();
     while (static_cast<int>(t1 - t0) < 2);
     int regs[4];
     __cpuid(regs, 0);                           // (serializes, as the original)
     const uint32_t c0 = static_cast<uint32_t>(__rdtsc());
     DWORD t2;
     do
-        t2 = timeGetTime();
+        t2 = platform::Milliseconds();
     while (static_cast<int>(t2 - t1) < 1001);
     __cpuid(regs, 0);
     const uint32_t c1 = static_cast<uint32_t>(__rdtsc());

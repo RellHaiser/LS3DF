@@ -17,6 +17,7 @@
 #include "i3d/sector.h"
 #include "igraph/igraph_state.h"
 #include "igraph/itexture.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::i3d;
@@ -237,7 +238,7 @@ void I3D_lens::DrawFlare(bool seen)
         ray = S_vector(ray.x * reach, ray.y * reach, ray.z * reach);
     }
 
-    const uint32_t now = timeGetTime();
+    const uint32_t now = platform::Milliseconds();
     if (!seen) {
         target = 0.0f;
     } else if (now - testTime >= testInterval) {

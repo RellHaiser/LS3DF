@@ -23,7 +23,6 @@
 #include "i3d/litobject.h"
 
 #include <windows.h>
-#include <mmsystem.h>
 
 #include <algorithm>
 #include <cmath>
@@ -42,6 +41,7 @@
 #include "i3d/scene.h"
 #include "i3d/sector.h"
 #include "igraph/igraph_state.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::i3d;
@@ -344,7 +344,7 @@ C_lightmapBaker::C_lightmapBaker(I3D_lit_object *object, I3D_scene *scene, const
     : m_object(object), m_scene(scene), m_planeNormal(planeNormal), m_flags(flags), m_progress(progress),
       m_context(context), m_set(&object->CurrentSet())
 {
-    m_lastReport = timeGetTime();
+    m_lastReport = platform::Milliseconds();
     const I3D_mesh *mesh = object->mesh;
     for (uint32_t i = 0; i < mesh->numLevels; ++i)
         m_totalFaces += mesh->levels[i]->NumFaces();
@@ -370,7 +370,7 @@ void C_lightmapBaker::ReportFaces(int faces)
 {
     if (!m_progress)
         return;
-    const DWORD now = timeGetTime();
+    const DWORD now = platform::Milliseconds();
     if (static_cast<int>(now - m_lastReport) < 250)
         return;
     m_progressValue = 100.0f / static_cast<float>(m_totalFaces) * static_cast<float>(faces) * 0.01f;
@@ -382,7 +382,7 @@ void C_lightmapBaker::ReportTexels(int done, int total, float patchShare)
 {
     if (!m_progress)
         return;
-    const DWORD now = timeGetTime();
+    const DWORD now = platform::Milliseconds();
     if (static_cast<int>(now - m_lastReport) < 250)
         return;
     const float perFace = 100.0f / static_cast<float>(m_totalFaces);

@@ -15,6 +15,7 @@
 #include "external/rw_data.h"
 #include "igraph/igraph_state.h"
 #include "igraph/itexture.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::ig;
@@ -67,8 +68,8 @@ void AddSlot(int sizeClass, D3DFORMAT format)
     g_poolBytes[sizeClass] += slot.desc.Size;
 }
 
-void Lock() { EnterCriticalSection(&g_textureLock); }
-void Unlock() { LeaveCriticalSection(&g_textureLock); }
+void Lock() { platform::Lock(g_textureLock); }
+void Unlock() { platform::Unlock(g_textureLock); }
 
 }  // namespace
 
@@ -149,7 +150,7 @@ DWORD WINAPI StreamThread(void *)
 {
     while (g_textureThreadRun) {
         if (!g_queueCount) {
-            Sleep(0);
+            platform::Pause(0);
             continue;
         }
         Lock();
@@ -227,7 +228,7 @@ DWORD WINAPI StreamThread(void *)
             g_queueRead = 0;
         --g_queueCount;
         Unlock();
-        Sleep(0);
+        platform::Pause(0);
     }
     return 0;
 }

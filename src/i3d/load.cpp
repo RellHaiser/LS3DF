@@ -8,8 +8,6 @@
 
 #include <cstring>
 
-#include <mmsystem.h>
-
 #include "core/debug.h"
 #include "external/rw_data.h"
 #include "i3d/anim.h"
@@ -26,6 +24,7 @@
 #include "i3d/visual.h"
 #include "igraph/igraph.h"
 #include "igraph/igraph_state.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::i3d;
@@ -64,10 +63,10 @@ bool WaitFor(const bool &busy)
 {
     if (!busy)
         return true;
-    const DWORD start = timeGetTime();
+    const DWORD start = platform::Milliseconds();
     do {
         g_pIGraph->ProcessWinMessages();
-        if (timeGetTime() - start > 4000)
+        if (platform::Milliseconds() - start > 4000)
             return false;
     } while (busy);
     return true;

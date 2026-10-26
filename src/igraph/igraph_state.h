@@ -6,7 +6,6 @@
 #include <cstdint>
 
 #include <windows.h>
-#include <mmsystem.h>
 
 #include "core/c_vector.h"
 #include "core/i3d_result.h"
@@ -19,6 +18,10 @@ class IShow;
 namespace ls3d::input {
 struct System;
 }  // namespace ls3d::input
+namespace ls3d::platform {
+struct Mutex;
+struct Thread;
+}  // namespace ls3d::platform
 
 namespace ls3d::ig {
 
@@ -108,9 +111,9 @@ extern ITexture *g_bumpAnimTextures[17];        // 0x100d1df8 BumpAnim_00.dds ..
 extern uint16_t g_textureId;                    // 0x100d2192 last ITexture::id given out
 
 // The texture loading thread (IG_TEXTURE_THREAD).
-extern CRITICAL_SECTION g_textureLock;          // 0x100d1720
+extern platform::Mutex *g_textureLock;          // 0x100d1720
 extern volatile int g_frameCounter;             // 0x100a7864 Flip count, under g_textureLock
-extern HANDLE g_textureThread;                  // 0x100d21c8
+extern platform::Thread *g_textureThread;       // 0x100d21c8
 extern bool g_textureThreadRun;                 // 0x100d21c7
 
 // Debug overlays toggled by Ctrl+Alt+Shift+F12 / F11 / F10.
@@ -154,7 +157,8 @@ void SetSwapMouseButtons(bool swap);
 int MouseMode();
 bool KeyboardUsesMessages();
 void QueueChar(int ch);
-void KeyFromMessage(const MSG &msg);
+// IGKEY_WINDOW_MESSAGES: a key from the window's messages (DIK_* code, 0: none) and its character.
+void KeyMessage(int key, int ch);
 
 // IGraph::ResizeImage (resize_image.cpp).
 bool ResizeImage(int srcWidth, int srcHeight, int srcPitch, const uint8_t *src, int dstWidth, int dstHeight,

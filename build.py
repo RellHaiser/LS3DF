@@ -97,6 +97,16 @@ SEAMS = [
     ("the DirectInput backend", ("dx/", "input/dinput/"),
      re.compile(r'#include <dinput\.h>|#include "input/dinput/|\bIDirectInput\w*|\bLPDIRECTINPUT\w*|'
                 r'\bDirectInput8Create\b')),
+    # The window, its messages, the cursor, time, threads and locks (docs/platform.md). (IShow and
+    # the DirectShow base classes keep theirs until the video seam.)
+    ("the Win32 platform", ("platform/win32/", "dshow/", "igraph/ishow.cpp"),
+     re.compile(r'#include <mmsystem\.h>|\b(timeGetTime|GetTickCount|Sleep|CreateWindowExA|RegisterClassExA|'
+                r'DefWindowProcA|PeekMessageA|DispatchMessageA|TranslateMessage|IsDialogMessageA|WaitMessage|'
+                r'SetWindowTextA|SetFocus|UpdateWindow|GetWindowRect|GetSystemMetrics|ClipCursor|SetCursorPos|'
+                r'SystemParametersInfoA|PostQuitMessage|GetForegroundWindow|IsChild|LoadMenuA|LoadCursorA|'
+                r'GetStockObject|GetDesktopWindow|VkKeyScanA|MapVirtualKeyA|CreateThread|SuspendThread|'
+                r'ResumeThread|TerminateThread|SetThreadPriority|WaitForSingleObject|InitializeCriticalSection|'
+                r'DeleteCriticalSection|EnterCriticalSection|LeaveCriticalSection)\s*\(')),
 ]
 
 

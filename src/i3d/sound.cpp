@@ -2,7 +2,6 @@
 #include "i3d/sound.h"
 
 #include <windows.h>
-#include <mmsystem.h>
 
 #include <cmath>
 #include <cstring>
@@ -15,6 +14,7 @@
 #include "i3d/render_state.h"
 #include "i3d/sector.h"
 #include "isnd/isnd.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::i3d;
@@ -188,7 +188,7 @@ bool I3D_sound::IsPlaying(bool device)
     if (loop)
         return true;
     // Out of range: still playing if the position it would have reached is before the end.
-    const uint32_t elapsed = timeGetTime() - stopTime;
+    const uint32_t elapsed = platform::Milliseconds() - stopTime;
     const uint32_t length = static_cast<uint32_t>(
         Ftol(static_cast<float>(static_cast<double>(static_cast<uint32_t>(GetLength())) / frequency)));
     return static_cast<uint32_t>(playPosition) + elapsed < length;
@@ -285,7 +285,7 @@ I3D_RESULT I3D_sound::SetCurrTime(int position)
     } else {
         playPosition = position;
         if (state == SNDST_OUT_OF_RANGE || state == SNDST_AUDIBLE) {
-            stopTime = timeGetTime();
+            stopTime = platform::Milliseconds();
             if (state == SNDST_OUT_OF_RANGE)
                 return I3D_OK;
         }
@@ -346,7 +346,7 @@ void I3D_sound::StopOutOfRange()
 {
     state = SNDST_OUT_OF_RANGE;
     soundFlags &= ~SNDF_PLAY;
-    stopTime = timeGetTime();
+    stopTime = platform::Milliseconds();
     playPosition = GetCurrTime();
     if (sound)
         sound->Stop();
@@ -410,7 +410,7 @@ void I3D_sound::SetActive(bool on, bool update)
     }
     if (old == SNDST_OUT_OF_RANGE || old == SNDST_AUDIBLE) {
         // Resume where it would be by now (looping: wrapped).
-        const uint32_t elapsed = timeGetTime() - stopTime;
+        const uint32_t elapsed = platform::Milliseconds() - stopTime;
         const uint32_t length = static_cast<uint32_t>(
             Ftol(static_cast<float>(static_cast<double>(static_cast<uint32_t>(GetLength())) / frequency)));
         if (!loop && static_cast<uint32_t>(playPosition) + elapsed >= length) {
@@ -566,7 +566,7 @@ void I3D_sound::Refresh()
     if (areas.Size() > 0) {
         if (areaFade >= 0.0f) {
             if ((soundFlags & SNDF_AREA_ACTIVE) && !IsTinyBits(1.0f - areaFade)) {
-                const DWORD now = timeGetTime();
+                const DWORD now = platform::Milliseconds();
                 float f = (1.0f / static_cast<float>(areaFadeDuration)) *
                     static_cast<float>(static_cast<int32_t>(now - areaFadeTime)) + areaFade;
                 if (!(f < 1.0f))
@@ -575,7 +575,7 @@ void I3D_sound::Refresh()
                 areaFadeTime = now;
                 v = f * v;
             } else if ((soundFlags & SNDF_AREA_LEAVING) && !IsTinyBits(areaFade)) {
-                const DWORD now = timeGetTime();
+                const DWORD now = platform::Milliseconds();
                 float f = areaFade - (1.0f / static_cast<float>(areaFadeDuration)) *
                     static_cast<float>(static_cast<int32_t>(now - areaFadeTime));
                 if (!(f > 0.0f))

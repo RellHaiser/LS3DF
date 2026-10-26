@@ -3,13 +3,12 @@
 
 #include <cmath>
 
-#include <mmsystem.h>
-
 #include "core/debug.h"
 #include "core/fpu.h"
 #include "core/i3d_result.h"
 #include "igraph/igraph_state.h"
 #include "isnd/isnd_voices.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::snd;
@@ -141,7 +140,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                 S_voice &voice = g_voices[index];
                 voice.priority = priority;
                 voice.loop = playFlags & ISNDP_LOOP;
-                voice.startTime = timeGetTime();
+                voice.startTime = platform::Milliseconds();
                 voice.pauseTime = 0;
                 voice.pausedTotal = 0;
                 if (keepPosition)
@@ -157,7 +156,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                     voice.buffer = buffer;
                     voice.priority = priority;
                     voice.loop = playFlags & ISNDP_LOOP;
-                    voice.startTime = timeGetTime();
+                    voice.startTime = platform::Milliseconds();
                     voice.pauseTime = 0;
                     voice.pausedTotal = 0;
                     S_voice &added = g_voices.PushBack(voice);
@@ -192,7 +191,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                         suspended.priority = priority;
                         suspended.loop = playFlags & ISNDP_LOOP;
                         audio::g_pAudio->GetCurrentPosition(buffer, &suspended.position, nullptr);
-                        suspended.suspendTime = timeGetTime();
+                        suspended.suspendTime = platform::Milliseconds();
                         g_suspendedVoices.PushBack(suspended);
                         return I3D_OK;
                     }
@@ -203,7 +202,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
                     // (The original reads the play cursor of this sound's buffer, not the
                     // suspended one's; kept.)
                     audio::g_pAudio->GetCurrentPosition(buffer, &suspended.position, nullptr);
-                    suspended.suspendTime = timeGetTime();
+                    suspended.suspendTime = platform::Milliseconds();
                     g_suspendedVoices.PushBack(suspended);
                     audio::g_pAudio->Stop(victim->buffer);
 
@@ -226,7 +225,7 @@ HRESULT ISND_sound::Play(uint32_t playFlags, uint32_t priority)
         return I3D_OK;
     if (ig::g_logSoundFailures) {
         ISND_source *playing = GetSource();
-        const DWORD now = timeGetTime();
+        const DWORD now = platform::Milliseconds();
         const char *name = GetSource()->GetFileName();
         dbgPrintf("[%i,%08X]CANT PLAY channel: P:%i, L:%i, CPos:%i/%i, %s", now,
                   static_cast<unsigned>(reinterpret_cast<uintptr_t>(this)), dsPriority,
@@ -281,7 +280,7 @@ HRESULT ISND_sound::SetPlayPosition(int position)
         if (IsManaged(this)) {
             const int index = FindVoice(this);
             if (index >= 0)
-                g_voices[index].pauseTime = timeGetTime();
+                g_voices[index].pauseTime = platform::Milliseconds();
         }
         return I3D_OK;
     }
@@ -293,7 +292,7 @@ HRESULT ISND_sound::SetPlayPosition(int position)
             const int index = FindVoice(this);
             if (index >= 0) {
                 S_voice &voice = g_voices[index];
-                voice.pausedTotal += timeGetTime() - voice.pauseTime;
+                voice.pausedTotal += platform::Milliseconds() - voice.pauseTime;
                 voice.pauseTime = 0;
             }
         }
@@ -305,10 +304,10 @@ HRESULT ISND_sound::SetPlayPosition(int position)
     if (IsManaged(this)) {
         const int index = FindVoice(this);
         if (index >= 0)
-            g_voices[index].startTime = timeGetTime() - position;
+            g_voices[index].startTime = platform::Milliseconds() - position;
         const int suspended = FindSuspendedVoice(this);
         if (suspended >= 0)
-            g_suspendedVoices[suspended].suspendTime = timeGetTime() - position;
+            g_suspendedVoices[suspended].suspendTime = platform::Milliseconds() - position;
     }
     return I3D_OK;
 }

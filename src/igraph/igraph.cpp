@@ -20,6 +20,7 @@
 #include "igraph/texture_stream.h"
 #include "isnd/isnd_voices.h"
 #include "math/ls3d_math.h"
+#include "platform/platform.h"
 
 using namespace ls3d;
 using namespace ls3d::ig;
@@ -72,9 +73,9 @@ ITexture *g_defaultTexture = nullptr;
 ITexture *g_bumpAnimTextures[17] = {};
 uint16_t g_textureId = 0;
 
-CRITICAL_SECTION g_textureLock;
+platform::Mutex *g_textureLock = nullptr;
 volatile int g_frameCounter = 0;
-HANDLE g_textureThread = nullptr;
+platform::Thread *g_textureThread = nullptr;
 bool g_textureThreadRun = false;
 
 bool g_showFps = false;
@@ -87,27 +88,32 @@ D3DVIEWPORT8 g_viewport;
 namespace {
 
 const char kSourceFile[] = "C:\\MyProjects\\Engine8_5\\IGraph\\IGraph.cpp";
-const char kWindowClass[] = "LS3D";
 
 // Window title, and its copy while the application is inactive.
 char g_appName[0x100];                          // 0x100d18b0
 char g_savedAppName[0x100];                     // 0x100d1aa0
 
-C_vector<HWND> g_dialogs(0x20);                 // 0x100d19b0
 C_vector<D3DDISPLAYMODE> g_displayModes(8);     // 0x100d2180 (refresh rates cleared)
 C_vector<D3DFORMAT> g_displayFormats(0x20);     // 0x100d2138
 uint8_t g_bitDepth = 0;                         // 0x100d1d40 (16 / 32; Init's request in fullscreen)
 
-// Accessibility keys switched off while the engine runs (SPI_GET/SETSTICKYKEYS ...). Only the
-// sticky keys structure gets its size: the filter and toggle keys calls fail as in the original.
-STICKYKEYS g_stickyKeys;                        // 0x100d1e3c
-FILTERKEYS g_filterKeys;                        // 0x100d1ddc
-TOGGLEKEYS g_toggleKeys;                        // 0x100d2164
-
 // FPS overlay counters.
 int g_fpsFrames = 0;                            // 0x100d21bc
 int g_fps = 0;                                  // 0x100d21c0
-DWORD g_fpsTime = timeGetTime();                // 0x100d2158 (static initializer 0x10069990)
+DWORD g_fpsTime = platform::Milliseconds();     // 0x100d2158 (static initializer 0x10069990)
+
+// IGraph's decisions about its window (platform/platform.h; below the device code).
+class IGraphWindowEvents final : public platform::WindowEvents {
+public:
+    bool OnClose(int code) override;
+    bool OnDestroy() override;
+    void OnActivate(bool active, bool minimized) override;
+    bool WaitWhileIdle() override;
+    void OnChar(int ch) override;
+    bool KeyboardFromMessages() override;
+    void OnKeyMessage(int key, int ch) override;
+};
+IGraphWindowEvents g_windowEvents;
 
 }  // namespace
 
@@ -160,7 +166,7 @@ IGraph::IGraph()
 
     g_maxTextureWidth = 0;
     g_maxTextureHeight = 0;
-    std::strcpy(g_appName, kWindowClass);
+    std::strcpy(g_appName, "LS3D");                  // (the window class's name)
 
     // Texture projection matrices. The original builds the rows from 4-float temporaries whose last
     // element it never sets (stack garbage in column 3); the port uses 0 (D3DTTFF_COUNT2 ignores it).
@@ -181,7 +187,8 @@ IGraph::IGraph()
 
     g_cachedTextures.Reserve(0x1000);
     g_uncachedTextures.Reserve(0x1000);
-    InitializeCriticalSection(&g_textureLock);
+    g_textureLock = platform::NewMutex();
+    platform::SetWindowEvents(&g_windowEvents);
 }
 
 // 0x10069e50
@@ -189,8 +196,8 @@ IGraph::~IGraph()
 {
     if (g_initialized)
         dbgPrintf("!! WARNING  IGraph was initialised, but not closed");
-    ClipCursor(nullptr);
-    DeleteCriticalSection(&g_textureLock);
+    platform::ReleaseCursorClip();
+    platform::DeleteMutex(g_textureLock);
 }
 
 // ---------------------------------------------------------------- object factories
@@ -315,7 +322,7 @@ bool __stdcall IGraph::SetAppName(const char *name)
         std::strncpy(g_appName, name, 0x100);
         g_appName[0xff] = 0;
     }
-    return SetWindowTextA(g_mainWnd, g_appName) != FALSE;
+    return platform::SetTitle(g_mainWnd, g_appName);
 }
 
 // 0x1006a2f0
@@ -338,43 +345,20 @@ const char *__stdcall IGraph::GetAppName()
 // 0x1006a340
 bool __stdcall IGraph::AddDlg(HWND dialog)
 {
-    if (!dialog)
-        return false;
-    g_dialogs.PushBack(dialog);
-    return true;
+    return platform::AddDialog(dialog);
 }
 
 // 0x1006a3d0
 bool __stdcall IGraph::DelDlg(HWND dialog)
 {
-    return g_dialogs.RemoveSwap(dialog);
+    return platform::RemoveDialog(dialog);
 }
 
 // 0x1006a470
 HRESULT __stdcall IGraph::ProcessWinMessages()
 {
-    for (;;) {
-        MSG msg;
-        while (!PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE | PM_NOYIELD)) {
-            if (!g_inactive || g_noActivation || !(g_init.flags & IG_WAIT_INACTIVE))
-                return 0;
-            WaitMessage();
-        }
-        int dialog = 0;
-        for (; dialog < g_dialogs.Size(); ++dialog) {
-            if (IsDialogMessageA(g_dialogs[dialog], &msg))
-                break;
-        }
-        // Typed characters (not repeats of a held key) queue for ReadChar.
-        if (msg.message == WM_CHAR && static_cast<LONG>(msg.lParam) >= 0)
-            QueueChar(static_cast<int>(msg.wParam));
-        if (KeyboardUsesMessages())
-            KeyFromMessage(msg);
-        if (dialog == g_dialogs.Size()) {
-            TranslateMessage(&msg);
-            DispatchMessageA(&msg);
-        }
-    }
+    platform::PumpMessages();
+    return 0;
 }
 
 // ---------------------------------------------------------------- device
@@ -662,8 +646,8 @@ HRESULT __stdcall IGraph::Flip()
     snd::UpdateVoices();
     if (g_showFps) {
         ++g_fpsFrames;
-        if (static_cast<int>(timeGetTime() - g_fpsTime) >= 1000) {
-            g_fpsTime = timeGetTime();
+        if (static_cast<int>(platform::Milliseconds() - g_fpsTime) >= 1000) {
+            g_fpsTime = platform::Milliseconds();
             g_fps = g_fpsFrames;
             g_fpsFrames = 0;
         }
@@ -679,11 +663,11 @@ HRESULT __stdcall IGraph::Flip()
         gfx::g_pGfx->EndScene();
     }
     if (g_init.flags & IG_TEXTURE_THREAD) {
-        EnterCriticalSection(&g_textureLock);
+        platform::Lock(g_textureLock);
         ++g_frameCounter;
-        LeaveCriticalSection(&g_textureLock);
+        platform::Unlock(g_textureLock);
     }
-    Sleep(0);
+    platform::Pause(0);
     HRESULT hr = gfx::g_pGfx->Present();
     if (hr == D3DERR_DEVICELOST) {
         if (IsMouseInit()) {
@@ -774,75 +758,69 @@ HRESULT __stdcall IGraph::DrawIndexedPrimitive(int kind, int numVertices, const 
                : 0;
 }
 
-// 0x1006b820
-static LRESULT CALLBACK IGraphWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+// The decisions of IGraph's window procedure (0x1006b820) and message loop (0x1006a470); the
+// platform does the rest (platform/win32).
+bool IGraphWindowEvents::OnClose(int code)
 {
-    switch (msg) {
-    case WM_ERASEBKGND:
-        return 0;
-    case WM_DESTROY:
-        if (!g_initialized)
-            return 1;
-        PostQuitMessage(0);
-        break;
-    case WM_CLOSE:
-        if (!g_initialized)
-            return 1;
-        g_pIGraph->Close();
-        std::exit(static_cast<int>(wParam));
-    case WM_SYSKEYDOWN:
-    case WM_SYSKEYUP:
-        // F10 and Alt combinations would open the window menu.
-        if (wParam == VK_F10 || (lParam & 0x20000000))
-            return 1;
-        break;
-    case WM_SYSCOMMAND:
-        if ((wParam & 0xfff0) == SC_SCREENSAVE || (wParam & 0xfff0) == SC_MONITORPOWER)
-            return 1;
-        break;
-    case WM_ACTIVATE: {
-        const bool active = LOWORD(wParam) != WA_INACTIVE;
-        bool deactivate = false;
-        bool reactivate = false;
-        if (g_noActivation) {
-            reactivate = g_inactive;
-        } else if (HIWORD(wParam)) {                // minimised
-            deactivate = !g_inactive;
-        } else if (g_inactive) {
-            reactivate = active;
-        } else if (!active) {
-            // Losing the focus to one of our own windows does not count.
-            const HWND foreground = GetForegroundWindow();
-            deactivate = !IsChild(g_mainWnd, foreground) && g_mainWnd != foreground;
-        }
-        if (deactivate) {
-            std::strcpy(g_savedAppName, g_appName);
-            if (g_init.flags & IG_WAIT_INACTIVE) {
-                if (std::strlen(g_appName) < 0xf6)
-                    std::strcat(g_appName, " ..zzZZ");
-                SetWindowTextA(g_mainWnd, g_appName);
-                if (g_textureThread)
-                    SuspendThread(g_textureThread);
-            }
-            g_inactive = true;
-        } else if (reactivate) {
-            g_pIGraph->SetAppName(g_savedAppName);
-            g_inactive = false;
-            if (gfx::g_pGfx->HasDevice())
-                i3d::ReapplyDriverStates();
-            // The players' volume is lost with the focus.
-            for (int i = g_shows.Size(); i--;) {
-                IShow *show = g_shows[i];
-                show->SetVolume(show->GetVolume());
-            }
-            if (g_textureThread)
-                ResumeThread(g_textureThread);
-        }
-        break;
-    }
-    }
-    return DefWindowProcA(hwnd, msg, wParam, lParam);
+    if (!g_initialized)
+        return false;
+    g_pIGraph->Close();
+    std::exit(code);
 }
+
+bool IGraphWindowEvents::OnDestroy()
+{
+    return g_initialized;
+}
+
+void IGraphWindowEvents::OnActivate(bool active, bool minimized)
+{
+    bool deactivate = false;
+    bool reactivate = false;
+    if (g_noActivation) {
+        reactivate = g_inactive;
+    } else if (minimized) {
+        deactivate = !g_inactive;
+    } else if (g_inactive) {
+        reactivate = active;
+    } else if (!active) {
+        // Losing the focus to one of our own windows does not count.
+        deactivate = !platform::ForegroundIsOwn(g_mainWnd);
+    }
+    if (deactivate) {
+        std::strcpy(g_savedAppName, g_appName);
+        if (g_init.flags & IG_WAIT_INACTIVE) {
+            if (std::strlen(g_appName) < 0xf6)
+                std::strcat(g_appName, " ..zzZZ");
+            platform::SetTitle(g_mainWnd, g_appName);
+            if (g_textureThread)
+                platform::Suspend(g_textureThread);
+        }
+        g_inactive = true;
+    } else if (reactivate) {
+        g_pIGraph->SetAppName(g_savedAppName);
+        g_inactive = false;
+        if (gfx::g_pGfx->HasDevice())
+            i3d::ReapplyDriverStates();
+        // The players' volume is lost with the focus.
+        for (int i = g_shows.Size(); i--;) {
+            IShow *show = g_shows[i];
+            show->SetVolume(show->GetVolume());
+        }
+        if (g_textureThread)
+            platform::Resume(g_textureThread);
+    }
+}
+
+bool IGraphWindowEvents::WaitWhileIdle()
+{
+    return g_inactive && !g_noActivation && (g_init.flags & IG_WAIT_INACTIVE);
+}
+
+// Typed characters (not repeats of a held key) queue for ReadChar.
+void IGraphWindowEvents::OnChar(int ch) { QueueChar(ch); }
+bool IGraphWindowEvents::KeyboardFromMessages() { return KeyboardUsesMessages(); }
+void IGraphWindowEvents::OnKeyMessage(int key, int ch) { KeyMessage(key, ch); }
 
 // 0x1006bb80
 const char *__stdcall IGraph::GetFormatName(D3DFORMAT format)
@@ -1085,48 +1063,30 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     Close();
 
     std::memset(i3d::g_renderStats, 0, sizeof i3d::g_renderStats);
-    WNDCLASSEXA wc = {};
-    wc.cbSize = sizeof wc;
-    wc.style = CS_CLASSDC;
-    wc.lpfnWndProc = IGraphWndProc;
-    wc.hInstance = g_init.instance;
-    wc.hCursor = LoadCursorA(nullptr, IDC_ARROW);
-    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-    wc.lpszClassName = kWindowClass;
-    if (!RegisterClassExA(&wc)) {
+    if (!platform::RegisterWindowClass(g_init.instance)) {
         dbgPrintf("IGraph::Init() - Error register window class !!");
         return I3DERR_GENERIC;
     }
 
     if (!(g_init.flags & IG_FULLSCREEN)) {
-        const int frameX = GetSystemMetrics(SM_CXFIXEDFRAME);
-        const int frameY = GetSystemMetrics(SM_CYFIXEDFRAME);
-        const int caption = GetSystemMetrics(SM_CYCAPTION);
-        int menu = 0;
-        if (g_init.flags & IG_MENU) {
-            if (!g_init.menu)
-                g_init.menu = LoadMenuA(GetModuleHandleA("LS3D.DLL"), MAKEINTRESOURCEA(123));
-            menu = GetSystemMetrics(SM_CYMENU);
-        }
-        g_mainWnd = CreateWindowExA(0, kWindowClass, "LS3D engine",
-                                    WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                                    g_init.x - frameX, g_init.y - menu - caption - frameY,
-                                    g_init.width + frameX * 2, g_init.height + frameY * 2 + menu + caption,
-                                    GetDesktopWindow(), g_init.menu, g_init.instance, nullptr);
+        const bool withMenu = (g_init.flags & IG_MENU) != 0;
+        if (withMenu && !g_init.menu)
+            g_init.menu = platform::LoadDefaultMenu();
+        g_mainWnd = platform::CreateMainWindow(g_init.instance, false, g_init.x, g_init.y, g_init.width,
+                                               g_init.height, withMenu, g_init.menu);
         if (!g_mainWnd) {
             dbgPrintf("IGraph::Init() - Error create m_MainHWnd !!");
             return I3DERR_GENERIC;
         }
-        UpdateWindow(g_mainWnd);
+        platform::Refresh(g_mainWnd);
         if (g_init.flags & IG_CHILD_WINDOW) {
-            g_childWnd = CreateWindowExA(0, kWindowClass, "LS3D engine", WS_CHILD | WS_VISIBLE, g_init.childX,
-                                         g_init.childY, g_init.childWidth, g_init.childHeight, g_mainWnd,
-                                         nullptr, g_init.instance, nullptr);
+            g_childWnd = platform::CreateChildWindow(g_init.instance, g_mainWnd, g_init.childX, g_init.childY,
+                                                     g_init.childWidth, g_init.childHeight);
             if (!g_childWnd) {
                 dbgPrintf("IGraph::Init() - Error create m_ChildHWnd !!");
                 return I3DERR_GENERIC;
             }
-            UpdateWindow(g_childWnd);
+            platform::Refresh(g_childWnd);
         }
     } else {
         g_init.flags &= ~IG_CHILD_WINDOW;
@@ -1135,14 +1095,13 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
         g_init.x = 0;
         g_init.y = 0;
         g_init.menu = nullptr;
-        g_mainWnd = CreateWindowExA(WS_EX_TOPMOST, kWindowClass, "LS3D engine", WS_VISIBLE, g_init.x, g_init.y,
-                                    g_init.width, g_init.height, GetDesktopWindow(), nullptr, g_init.instance,
-                                    nullptr);
+        g_mainWnd = platform::CreateMainWindow(g_init.instance, true, g_init.x, g_init.y, g_init.width, g_init.height,
+                                               false, g_init.menu);
         if (!g_mainWnd)
             return I3DERR_GENERIC;
-        UpdateWindow(g_mainWnd);
+        platform::Refresh(g_mainWnd);
     }
-    SetFocus(g_mainWnd);
+    platform::Focus(g_mainWnd);
 
     if (!gfx::g_pGfx->Open()) {
         dbgPrintf("IGraph::Init() - Error create D3D8 object !!");
@@ -1500,33 +1459,10 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
         LogDxError(hr, 0xbd7);
         return I3DERR_GENERIC;
     }
-    SetSwapMouseButtons(GetSystemMetrics(SM_SWAPBUTTON) != 0);
+    SetSwapMouseButtons(platform::MouseButtonsSwapped());
 
-    // Sticky keys off while the engine runs (Close restores the saved state). The original switches
-    // filter and toggle keys "off" only when sticky keys had flags, and never sets their structure
-    // sizes, so those calls fail.
-    g_stickyKeys.cbSize = sizeof g_stickyKeys;
-    SystemParametersInfoA(SPI_GETSTICKYKEYS, sizeof g_stickyKeys, &g_stickyKeys, 0);
-    const DWORD stickyFlags = g_stickyKeys.dwFlags;
-    if (stickyFlags) {
-        g_stickyKeys.dwFlags = 0;
-        SystemParametersInfoA(SPI_SETSTICKYKEYS, g_stickyKeys.cbSize, &g_stickyKeys, 0);
-        g_stickyKeys.dwFlags = stickyFlags;
-    }
-    SystemParametersInfoA(SPI_GETFILTERKEYS, g_filterKeys.cbSize, &g_filterKeys, 0);
-    if (g_stickyKeys.dwFlags) {
-        const DWORD saved = g_filterKeys.dwFlags;
-        g_filterKeys.dwFlags = 0;
-        SystemParametersInfoA(SPI_SETFILTERKEYS, g_filterKeys.cbSize, &g_filterKeys, 0);
-        g_filterKeys.dwFlags = saved;
-    }
-    SystemParametersInfoA(SPI_GETTOGGLEKEYS, g_toggleKeys.cbSize, &g_toggleKeys, 0);
-    if (g_stickyKeys.dwFlags) {
-        const DWORD saved = g_toggleKeys.dwFlags;
-        g_toggleKeys.dwFlags = 0;
-        SystemParametersInfoA(SPI_SETTOGGLEKEYS, g_toggleKeys.cbSize, &g_toggleKeys, 0);
-        g_toggleKeys.dwFlags = saved;
-    }
+    // Sticky keys off while the engine runs (Close restores the saved state).
+    platform::DisableAccessibilityKeys();
 
     ResetDeviceStates();
     if (caps.Caps2 & D3DCAPS2_FULLSCREENGAMMA) {
@@ -1544,9 +1480,8 @@ HRESULT __stdcall IGraph::Init(const S_IGraphInit *init)
     if (g_init.flags & IG_TEXTURE_THREAD) {
         tex::StreamInit(g_init.flags);
         g_textureThreadRun = true;
-        DWORD threadId;
-        g_textureThread = CreateThread(nullptr, 0, tex::StreamThread, nullptr, 0, &threadId);
-        SetThreadPriority(g_textureThread, THREAD_PRIORITY_NORMAL);
+        g_textureThread = platform::StartThread(tex::StreamThread, nullptr);
+        platform::SetPriority(g_textureThread, THREAD_PRIORITY_NORMAL);
     }
     Clear(0, 1.0f, 3);
     Flip();
@@ -1588,16 +1523,14 @@ HRESULT __stdcall IGraph::Close()
             texture = nullptr;
         }
     }
-    ClipCursor(nullptr);
+    platform::ReleaseCursorClip();
     if ((g_init.flags & IG_TEXTURE_THREAD) && g_textureThreadRun) {
         g_textureThreadRun = false;
-        WaitForSingleObject(g_textureThread, INFINITE);
-        CloseHandle(g_textureThread);
+        platform::Join(g_textureThread);
+        platform::Release(g_textureThread);
     }
     SetSwapMouseButtons(false);
-    SystemParametersInfoA(SPI_SETSTICKYKEYS, g_stickyKeys.cbSize, &g_stickyKeys, 0);
-    SystemParametersInfoA(SPI_SETFILTERKEYS, g_filterKeys.cbSize, &g_filterKeys, 0);
-    SystemParametersInfoA(SPI_SETTOGGLEKEYS, g_toggleKeys.cbSize, &g_toggleKeys, 0);
+    platform::RestoreAccessibilityKeys();
     g_vbManager.FreeUnused();
     g_ibManager.FreeUnused();
     g_vbManager.FreeAll();
@@ -1656,7 +1589,7 @@ HRESULT __stdcall IGraph::Close()
     ReleaseDirectInput();
     if (gfx::g_pGfx->HasDevice()) {
         if (g_init.flags & IG_TEXTURE_THREAD) {
-            TerminateThread(g_textureThread, 0);
+            platform::Terminate(g_textureThread, 0);
             tex::StreamFlush();
         }
         g_textureThread = nullptr;
