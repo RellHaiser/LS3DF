@@ -113,6 +113,9 @@ All 55 exports are bit-exact against the original under PC_24. MSVC 6's `acos` i
   them at 0.
 - Texture cache files (`*_N.565`, `.DX1` …) are written next to the image's path, as in the
   original.
+- The held key of `IGKEY_REPEAT` starts as key 0, as the original's zero-initialised variable does:
+  the first `GetKey` in repeat mode returns 0. (The port started it at -1 until `compare_input`
+  found the difference.)
 
 ### The S3TC encoder
 

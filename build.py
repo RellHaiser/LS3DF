@@ -85,15 +85,18 @@ def cflags(debug):
             "/I" + SRC, "/I" + os.path.join(ROOT, "include")]
 
 
-# The device seams (docs/render_device.md, docs/sound_device.md): only a backend and the API
-# declarations may name the API's interfaces or include them; the rest of the engine draws through
-# gfx::Device and plays sound through audio::Device.
+# The device seams (docs/render_device.md, sound_device.md, input_device.md): only a backend and the
+# API declarations may name the API's interfaces or include them; the rest of the engine draws
+# through gfx::Device, plays sound through audio::Device and reads input through input::Device.
 SEAMS = [
     ("the Direct3D 8 backend", ("dx/", "gfx/d3d8/"),
      re.compile(r'#include "dx/d3d8\.h"|#include "gfx/d3d8/|\bIDirect3D\w*8\b|\bg_pD3D\b|\bg_pDevice\b')),
     ("the DirectSound backend", ("dx/", "audio/dsound/"),
      re.compile(r'#include <dsound\.h>|#include "audio/dsound/|\bIDirectSound\w*|\bIKsPropertySet\b|'
                 r'\bLPDIRECTSOUND\w*|\bDirectSound(Create8|Enumerate\w*)\b')),
+    ("the DirectInput backend", ("dx/", "input/dinput/"),
+     re.compile(r'#include <dinput\.h>|#include "input/dinput/|\bIDirectInput\w*|\bLPDIRECTINPUT\w*|'
+                r'\bDirectInput8Create\b')),
 ]
 
 

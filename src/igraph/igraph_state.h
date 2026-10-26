@@ -16,6 +16,9 @@
 
 class ITexture;
 class IShow;
+namespace ls3d::input {
+struct System;
+}  // namespace ls3d::input
 
 namespace ls3d::ig {
 
@@ -142,7 +145,8 @@ inline void SetSpecular(int on)
     }
 }
 
-// Input (igraph_input.cpp).
+// Input (igraph_input.cpp): the input system (0x100d1d0c; InitDirectInput creates it).
+extern input::System *g_dinput;
 void ResetInputState();
 HRESULT InitDirectInput(HINSTANCE instance);
 void ReleaseDirectInput();
