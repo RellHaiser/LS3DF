@@ -18,6 +18,11 @@ and calls engine objects directly. Every function carries the original's address
 commented); plain memory bugs (reads of freed memory, overruns, leaks, endless loops) are fixed,
 each with a comment. [docs/porting_notes.md](docs/porting_notes.md) lists them by module.
 
+The long-term goal is to run on other operating systems than Windows (SDL3, OpenAL Soft, FFmpeg
+and SDL_GPU in place of Win32 and DirectX). [docs/cross_platform.md](docs/cross_platform.md)
+tracks the plan: phase 1, putting every API behind an engine-owned interface while still on
+Direct3D 8, is done.
+
 The companion port of `rw_data.dll`, the game's data-file layer, is at
 <https://github.com/RellHaiser/rw_data>.
 
