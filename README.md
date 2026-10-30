@@ -26,6 +26,9 @@ Direct3D 8, is done.
 The companion port of `rw_data.dll`, the game's data-file layer, is at
 <https://github.com/RellHaiser/rw_data>.
 
+The engine's file formats, as the source reads them: [docs/4ds_format.md](docs/4ds_format.md)
+(models and mission scenes) and [docs/5ds_format.md](docs/5ds_format.md) (animations).
+
 ## Status
 
 > **Tried briefly in the game.** In a first session (October 2026) the built DLL ran Hidden &
