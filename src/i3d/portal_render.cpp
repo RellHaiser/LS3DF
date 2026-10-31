@@ -481,6 +481,44 @@ static void TraverseSector(I3D_sector *sector, I3D_portal *portal)
     sector->sectorFlags ^= 2;
 }
 
+// (Port enhancement, LS3DF.ini NearPortalDistance) Whether the camera is within the distance of
+// the portal's opening (the polygon, not its plane).
+static bool NearPortal(const I3D_portal *portal)
+{
+    const float range = 1.0f;
+    if (!(range > 0.0f))
+        return false;
+    const S_vector &e = g_renderCamera->GetMatrix()(3);
+    const float d = portal->plane.Distance(e);
+    if (std::fabs(d) > range)
+        return false;
+    const int count = portal->numVertices;
+    if (count < 3)
+        return false;
+    auto vertex = [portal](int i) { return *reinterpret_cast<const S_vector *>(&portal->worldVertices[i]); };
+    // The camera's foot on the plane inside the polygon (every edge turns the same way): the plane's
+    // distance; else the nearest edge's.
+    const S_vector foot = e - portal->plane.normal * d;
+    bool positive = false, negative = false;
+    float nearest = range * range + 1.0f;
+    for (int i = 0; i < count; ++i) {
+        const S_vector a = vertex(i), b = vertex(i + 1 < count ? i + 1 : 0);
+        const S_vector edge = b - a;
+        const float turn = edge.Cross(foot - a).Dot(portal->plane.normal);
+        positive |= turn > 0.0f;
+        negative |= turn < 0.0f;
+        const float len2 = edge.Square();
+        float t = len2 > 0.0f ? (e - a).Dot(edge) / len2 : 0.0f;
+        t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+        const float sq = (e - (a + edge * t)).Square();
+        if (sq < nearest)
+            nearest = sq;
+    }
+    if (!(positive && negative))
+        return true;
+    return nearest <= range * range;
+}
+
 static void ParsePortal(I3D_portal *prev, I3D_portal *portal, bool backwards)
 {
     I3D_sector *target = backwards ? portal->owner : portal->connectedSector;
@@ -511,8 +549,16 @@ static void ParsePortal(I3D_portal *prev, I3D_portal *portal, bool backwards)
         const S_vector p = v * m;
         proj[i] = S_vector4{ inv * p.x, inv * p.y, wv, 0.0f };
     }
-    if (portal->renderFlags & PRTR_ALL_BEHIND)
+    if (portal->renderFlags & PRTR_ALL_BEHIND) {
+        // (Port enhancement) A portal of the camera's own sector:
+        // when the camera stands just past it, looking away, what sticks out of the sector beyond
+        // is still in view - a bunker gun's camera outside its embrasure, the gun's sight in front.
+        // That sector is looked into with the whole view (its frames are culled by the frustum;
+        // the depth buffer keeps what the camera's sector hides).
+        if (!prev && NearPortal(portal))
+            fullView();
         return;
+    }
     if (portal->renderFlags & PRTR_PARTLY_BEHIND) {
         // From the first vertex in front after one behind, around to the last in front: the
         // rect of those, open towards the sides where the edges go behind the camera.
