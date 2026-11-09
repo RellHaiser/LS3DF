@@ -486,7 +486,7 @@ static void TraverseSector(I3D_sector *sector, I3D_portal *portal)
 // the portal's opening (the polygon, not its plane).
 static bool NearPortal(const I3D_portal *portal)
 {
-    const float range = Enhancements().nearPortalDistance;
+    const float range = 1.0f;
     if (!(range > 0.0f))
         return false;
     const S_vector &e = g_renderCamera->GetMatrix()(3);
@@ -551,7 +551,7 @@ static void ParsePortal(I3D_portal *prev, I3D_portal *portal, bool backwards)
         proj[i] = S_vector4{ inv * p.x, inv * p.y, wv, 0.0f };
     }
     if (portal->renderFlags & PRTR_ALL_BEHIND) {
-        // (Port enhancement, LS3DF.ini NearPortalDistance) A portal of the camera's own sector:
+        // (Port enhancement) A portal of the camera's own sector:
         // when the camera stands just past it, looking away, what sticks out of the sector beyond
         // is still in view - a bunker gun's camera outside its embrasure, the gun's sight in front.
         // That sector is looked into with the whole view (its frames are culled by the frustum;
