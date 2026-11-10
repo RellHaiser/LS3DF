@@ -1,3 +1,5 @@
+# ATTENTION: Work continues within <https://github.com/RellHaiser/HD2_SabreSquadron>.
+
 # LS3DF.dll — source port
 
 Clean C++17 rewrite of `LS3DF.dll`, the LS3D engine (version 5.59.5, build of 16 August 2004)
